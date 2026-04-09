@@ -142,6 +142,7 @@ module vga_raycast_demo(
     input wire turn_right,
     input wire strafe_left,
     input wire strafe_right,
+    input wire manual_enable,
     output wire active,
     output wire [9:0] hc,
     output wire [9:0] vc,
@@ -193,7 +194,7 @@ module vga_raycast_demo(
     sin_cos_lut cam_lut(.angle(cam_angle), .sin_out(move_sin), .cos_out(move_cos));
     ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .dist_steps(dist_steps), .side(side));
 
-    assign manual_active = move_fwd | move_back | turn_left | turn_right | strafe_left | strafe_right;
+    assign manual_active = manual_enable;
     assign ctrl_fwd = manual_active ? move_fwd : ~demo_tick[6];
     assign ctrl_back = manual_active ? move_back : 1'b0;
     assign ctrl_left = manual_active ? turn_left : 1'b0;

@@ -9,6 +9,7 @@ module tb_vga_frame_sequence;
     reg turn_right;
     reg strafe_left;
     reg strafe_right;
+    reg manual_enable;
 
     wire hsync;
     wire vsync;
@@ -35,6 +36,7 @@ module tb_vga_frame_sequence;
         .turn_right(turn_right),
         .strafe_left(strafe_left),
         .strafe_right(strafe_right),
+        .manual_enable(manual_enable),
         .active(active),
         .hc(hc),
         .vc(vc),
@@ -118,6 +120,7 @@ module tb_vga_frame_sequence;
         turn_right = 0;
         strafe_left = 0;
         strafe_right = 0;
+        manual_enable = 1'b1;
 
         frame_index = 0;
         pixel_count = 0;

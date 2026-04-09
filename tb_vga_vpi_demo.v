@@ -9,6 +9,7 @@ module tb_vga_vpi_demo;
     reg turn_right;
     reg strafe_left;
     reg strafe_right;
+    reg manual_enable;
 
     wire hsync;
     wire vsync;
@@ -31,6 +32,7 @@ module tb_vga_vpi_demo;
         .turn_right(turn_right),
         .strafe_left(strafe_left),
         .strafe_right(strafe_right),
+        .manual_enable(manual_enable),
         .active(active),
         .hc(hc),
         .vc(vc),
@@ -82,6 +84,7 @@ module tb_vga_vpi_demo;
         turn_right = 0;
         strafe_left = 0;
         strafe_right = 0;
+        manual_enable = 1'b1;
         last_keymask = 0;
 
         rst = 1'b1;

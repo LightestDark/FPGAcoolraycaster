@@ -2,9 +2,11 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <SDL2/SDL.h>
 
 #include "Vvga_raycast_demo.h"
 #include "verilated.h"
@@ -13,7 +15,7 @@ static FILE *open_ffmpeg_pipe(int width, int height, int fps, const char *out_na
 {
     char command[512];
     std::snprintf(command, sizeof(command),
-        "ffmpeg -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r %d -i - -vf format=yuv420p %s",
+        "ffmpeg -hide_banner -loglevel error -nostats -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r %d -i - -vf format=yuv420p %s",
         width, height, fps, out_name);
     return popen(command, "w");
 }
@@ -54,7 +56,7 @@ int main(int argc, char **argv)
     Verilated::commandArgs(argc, argv);
 
     const int frames = 600;
-    const int fps = 30;
+    const int fps = 60;
     const int sample_shift = 1; // 0=640x480, 1=320x240, 2=160x120
     const int cap_w = 640 >> sample_shift;
     const int cap_h = 480 >> sample_shift;
@@ -70,15 +72,38 @@ int main(int argc, char **argv)
     top.turn_right = 0;
     top.strafe_left = 0;
     top.strafe_right = 0;
+    top.manual_enable = 1;
 
     set_raw_terminal(true);
 
     FILE *pipe = nullptr;
+    SDL_Window *window = nullptr;
+    SDL_Renderer *renderer = nullptr;
+    SDL_Texture *texture = nullptr;
+    std::vector<unsigned char> frame_buf(static_cast<size_t>(cap_w) * cap_h * 3);
     int frame_count = 0;
     int key_hold = 0;
     int key_code = -1;
+    int pixel_index = 0;
+    bool quit = false;
 
     std::printf("Controls: W/S forward/back, A/D turn, Q/E strafe, ESC to stop\n");
+
+    if (SDL_Init(SDL_INIT_VIDEO) == 0) {
+        window = SDL_CreateWindow("raycaster live",
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            cap_w * 2, cap_h * 2, 0);
+        if (window) {
+            renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+            if (renderer) {
+                SDL_RenderSetLogicalSize(renderer, cap_w, cap_h);
+                texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,
+                    SDL_TEXTUREACCESS_STREAMING, cap_w, cap_h);
+            }
+        }
+    } else {
+        std::fprintf(stderr, "SDL init failed: %s\n", SDL_GetError());
+    }
 
     const int reset_cycles = 10;
     for (int i = 0; i < reset_cycles; ++i) {
@@ -88,7 +113,7 @@ int main(int argc, char **argv)
     }
     top.rst = 0;
 
-    while (!Verilated::gotFinish() && frame_count < frames) {
+    while (!Verilated::gotFinish() && frame_count < frames && !quit) {
         top.clk_25 = 1;
         top.eval();
 
@@ -99,6 +124,17 @@ int main(int argc, char **argv)
                     std::fprintf(stderr, "Failed to open ffmpeg pipe\n");
                     set_raw_terminal(false);
                     return 1;
+                }
+            }
+            pixel_index = 0;
+        }
+
+        if (renderer) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    quit = true;
+                    break;
                 }
             }
         }
@@ -145,6 +181,18 @@ int main(int argc, char **argv)
                 if (pipe) {
                     std::fwrite(rgb, 1, sizeof(rgb), pipe);
                 }
+                if (pixel_index + 2 < static_cast<int>(frame_buf.size())) {
+                    frame_buf[static_cast<size_t>(pixel_index + 0)] = rgb[0];
+                    frame_buf[static_cast<size_t>(pixel_index + 1)] = rgb[1];
+                    frame_buf[static_cast<size_t>(pixel_index + 2)] = rgb[2];
+                }
+                pixel_index += 3;
+                if (texture && pixel_index == cap_w * cap_h * 3) {
+                    SDL_UpdateTexture(texture, nullptr, frame_buf.data(), cap_w * 3);
+                    SDL_RenderClear(renderer);
+                    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                    SDL_RenderPresent(renderer);
+                }
             }
         }
 
@@ -163,6 +211,17 @@ int main(int argc, char **argv)
         std::fflush(pipe);
         pclose(pipe);
     }
+
+    if (texture) {
+        SDL_DestroyTexture(texture);
+    }
+    if (renderer) {
+        SDL_DestroyRenderer(renderer);
+    }
+    if (window) {
+        SDL_DestroyWindow(window);
+    }
+    SDL_Quit();
 
     set_raw_terminal(false);
 
