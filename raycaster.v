@@ -274,13 +274,13 @@ module vga_raycast_demo(
         ray_angle_sum = $signed({1'b0, cam_angle}) + sweep_shift;
         ray_angle = ray_angle_sum[7:0];
 
-        wall_type = wall_type_at(hit_tile_x, hit_tile_y);
-        case (wall_type)
-            2'd1: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
-            2'd2: begin wall_r = 4'd2; wall_g = wall_lit; wall_b = 4'd1; end
-            2'd3: begin wall_r = 4'd2; wall_g = 4'd2; wall_b = wall_lit; end
-            default: begin wall_r = wall_lit; wall_g = wall_lit >> 1; wall_b = 4'd0; end
-        endcase
+            wall_type = wall_type_at(hit_tile_x, hit_tile_y);
+            case (wall_type)
+                2'd1: begin wall_r = wall_lit; wall_g = 4'd1; wall_b = 4'd0; end
+                2'd2: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
+                2'd3: begin wall_r = 4'd2; wall_g = 4'd3; wall_b = 4'd1; end
+                default: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
+            endcase
 
         sprite_dx = $signed({2'b0, 16'd1408}) - $signed({2'b0, player_x});
         sprite_dy = $signed({2'b0, 16'd1152}) - $signed({2'b0, player_y});
@@ -305,7 +305,7 @@ module vga_raycast_demo(
         else if (dist_steps > 9'd60) shade = 4'd9;
         else if (dist_steps > 9'd40) shade = 4'd11;
         else shade = 4'd13;
-        wall_half = (10'd180 / (dist_steps + 1)) + 10'd6;
+        wall_half = (10'd260 / (dist_steps + 1)) + 10'd10;
         wall_top = 10'd240 - wall_half;
         wall_bottom = 10'd240 + wall_half;
         if (!active) begin
@@ -317,7 +317,7 @@ module vga_raycast_demo(
         end else if (sprite_on) begin
             vga_r = 4'd1; vga_g = 4'd12; vga_b = 4'd15;
         end else if (hit) begin
-            if (hit_tile_x[0] ^ hit_tile_y[0] ^ side ^ vc[3]) begin
+            if (hit_tile_x[1] ^ hit_tile_y[1] ^ side ^ vc[4]) begin
                 vga_r = side ? (wall_r >> 1) : wall_r;
                 vga_g = wall_g;
                 vga_b = wall_b;
