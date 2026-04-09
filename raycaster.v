@@ -441,8 +441,8 @@ module vga_raycast_demo(
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
         moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-        star_on = (((hc * 10'd73 + vc * 10'd151 + 10'd29) ^ (hc << 3)) & 10'h3ff) < 10'd3 &&
-              (vc < 10'd200);
+        star_on = (((hc * 10'd73 + vc * 10'd151 + 10'd29) ^ (hc << 3)) & 10'h3ff) < 10'd2 &&
+              (vc < 10'd140);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
