@@ -201,6 +201,8 @@ module vga_raycast_demo(
     reg signed [11:0] moon_dx2, moon_dy2;
     reg [23:0] moon_dist, moon_dist2;
     reg moon_on;
+    reg moon_disk;
+    reg moon_crescent;
     reg star_on;
     reg star_on2;
     reg dust_on;
@@ -472,15 +474,16 @@ module vga_raycast_demo(
         moon_dy2 = moon_dy;
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
-        moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-        moon_rim = (moon_dist <= 24'd1024) && !moon_on;
+        moon_disk = (moon_dist <= 24'd900);
+        moon_crescent = moon_disk && (moon_dist2 > 24'd784);
+        moon_on = moon_disk;
+        moon_rim = moon_disk && (moon_dist > 24'd784);
         sky_x1 = {1'b0, hc} + {2'b0, cam_angle} + {4'b0000, demo_tick[6:0]};
         sky_x2 = {1'b0, hc} + {3'b000, cam_angle[7:1]} + {5'b00000, demo_tick[5:0]};
-        star_on = (((sky_x1[7:0] * 8'd37 + vc[7:0] * 8'd53 + 8'd19) & 8'hff) < 8'd3) &&
-                  (vc < 10'd140);
-        star_on2 = (((sky_x2[7:0] * 8'd23 + vc[7:0] * 8'd41 + 8'd7) & 8'hff) < 8'd2) &&
-                   (vc < 10'd140);
-        dust_on = ((((hc[7:0] + demo_tick[7:0]) ^ (vc[7:0] + {2'b00, demo_tick[5:0]})) & 8'h3f) == 8'h00);
+        star_on = (((sky_x1[7:0] * 8'd197 + vc[7:0] * 8'd73 + (sky_x1[7:0] ^ vc[7:0])) & 8'hff) < 8'd2) &&
+              (vc < 10'd140);
+        star_on2 = 1'b0;
+        dust_on = 1'b0;
         meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
         meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
         meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
@@ -490,8 +493,11 @@ module vga_raycast_demo(
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
-            if (moon_rim && (hc < 10'd620) && (vc < 10'd160)) begin
-                vga_r = 4'd12; vga_g = 4'd12; vga_b = 4'd12;
+            if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
+                vga_r = 4'd10; vga_g = 4'd10; vga_b = 4'd10;
+                if (moon_crescent) begin
+                    vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+                end
             end else if ((star_on || star_on2) && (vc < 10'd140)) begin
                 vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
             end else if (dust_on && (vc < 10'd180)) begin
