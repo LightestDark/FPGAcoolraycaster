@@ -75,6 +75,8 @@ module ray_dda(
     output reg hit,
     output reg [4:0] hit_tile_x,
     output reg [4:0] hit_tile_y,
+    output reg [17:0] hit_x_fp,
+    output reg [17:0] hit_y_fp,
     output reg [8:0] dist_steps,
     output reg side
 );
@@ -102,6 +104,7 @@ module ray_dda(
 
     always @(*) begin
         hit = 0; hit_tile_x = 0; hit_tile_y = 0; dist_steps = 0; side = 0;
+        hit_x_fp = 0; hit_y_fp = 0;
         x_fp = {2'b0, ray_x_q8_8}; y_fp = {2'b0, ray_y_q8_8};
         dir_x_ext = {{2{dir_x_q1_14[15]}}, dir_x_q1_14};
         dir_y_ext = {{2{dir_y_q1_14[15]}}, dir_y_q1_14};
@@ -114,11 +117,12 @@ module ray_dda(
             begin : walk
                 for (i = 0; i < MAX_STEPS; i = i + 1) begin
                     if (x_fp < 0 || y_fp < 0 || x_fp >= 18'd8192 || y_fp >= 18'd8192) begin
-                        hit = 1; dist_steps = i[8:0]; disable walk;
+                        hit = 1; dist_steps = i[8:0]; hit_x_fp = x_fp; hit_y_fp = y_fp; disable walk;
                     end
                     tx = x_fp[12:8]; ty = y_fp[12:8];
                     if (is_wall(tx, ty)) begin
-                        hit = 1; hit_tile_x = tx; hit_tile_y = ty; dist_steps = i[8:0]; disable walk;
+                        hit = 1; hit_tile_x = tx; hit_tile_y = ty; dist_steps = i[8:0];
+                        hit_x_fp = x_fp; hit_y_fp = y_fp; disable walk;
                     end
                     if (abs_dx >= abs_dy) begin
                         x_fp = x_fp + step_x; err = err + abs_dy; side = 0;
@@ -155,6 +159,7 @@ module vga_raycast_demo(
     wire hit, side;
     wire [8:0] dist_steps;
     wire [4:0] hit_tile_x, hit_tile_y;
+    wire [17:0] hit_x_fp, hit_y_fp;
     reg [7:0] ray_angle;
     wire signed [15:0] sin_out, cos_out;
     wire signed [15:0] move_sin, move_cos;
@@ -170,8 +175,10 @@ module vga_raycast_demo(
     reg signed [15:0] move_dx, move_dy;
     reg [1:0] wall_type;
     reg [3:0] wall_r, wall_g, wall_b;
-    reg tex_bit;
-    reg [3:0] wall_r_tex, wall_g_tex, wall_b_tex;
+    reg [3:0] tex_u, tex_v;
+    reg [9:0] wall_h;
+    reg [11:0] tex_color;
+    reg [3:0] tex_r, tex_g, tex_b;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
     reg signed [17:0] sprite_forward_s, sprite_cross_s;
@@ -219,10 +226,28 @@ module vga_raycast_demo(
         end
     endfunction
 
+    function automatic [11:0] tex_sample;
+        input [1:0] tex_id;
+        input [3:0] u;
+        input [3:0] v;
+        reg mortar;
+        reg stripe;
+        begin
+            mortar = (u[1:0] == 2'b00) || (v[1:0] == 2'b00);
+            stripe = (u[2] ^ v[1]);
+            case (tex_id)
+                2'd1: tex_sample = mortar ? 12'h300 : (stripe ? 12'hb54 : 12'h954);
+                2'd2: tex_sample = mortar ? 12'h310 : (stripe ? 12'hc64 : 12'ha53);
+                2'd3: tex_sample = mortar ? 12'h210 : (stripe ? 12'h944 : 12'h733);
+                default: tex_sample = mortar ? 12'h320 : (stripe ? 12'hb63 : 12'h853);
+            endcase
+        end
+    endfunction
+
     vga_sync sync_i(.clk_25(clk_25), .rst(rst), .hsync(hsync), .vsync(vsync), .hc(hc), .vc(vc), .active(active));
     sin_cos_lut l(.angle(ray_angle), .sin_out(sin_out), .cos_out(cos_out));
     sin_cos_lut cam_lut(.angle(cam_angle), .sin_out(move_sin), .cos_out(move_cos));
-    ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .dist_steps(dist_steps), .side(side));
+    ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .hit_x_fp(hit_x_fp), .hit_y_fp(hit_y_fp), .dist_steps(dist_steps), .side(side));
 
     assign manual_active = manual_enable;
     assign wall_lit = (dist_steps > 9'd120) ? (shade >> 3) :
@@ -277,22 +302,18 @@ module vga_raycast_demo(
         ray_angle = ray_angle_sum[7:0];
 
             wall_type = wall_type_at(hit_tile_x, hit_tile_y);
-            tex_bit = hit_tile_x[0] ^ hit_tile_y[0] ^ hc[2] ^ vc[2];
-            case (wall_type)
-                2'd1: begin wall_r = wall_lit; wall_g = 4'd1; wall_b = 4'd0; end
-                2'd2: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
-                2'd3: begin wall_r = 4'd2; wall_g = 4'd3; wall_b = 4'd1; end
-                default: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
-            endcase
-            if (tex_bit) begin
-                wall_r_tex = (wall_r > 4'd14) ? 4'd15 : (wall_r + 4'd1);
-                wall_g_tex = (wall_g > 4'd14) ? 4'd15 : (wall_g + 4'd1);
-                wall_b_tex = (wall_b > 4'd14) ? 4'd15 : (wall_b + 4'd1);
-            end else begin
-                wall_r_tex = wall_r;
-                wall_g_tex = wall_g;
-                wall_b_tex = wall_b;
-            end
+            tex_u = side ? hit_y_fp[7:4] : hit_x_fp[7:4];
+            wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
+            if (vc < wall_top) tex_v = 4'd0;
+            else if (vc > wall_bottom) tex_v = 4'd15;
+            else tex_v = ((vc - wall_top) * 16) / wall_h;
+            tex_color = tex_sample(wall_type, tex_u, tex_v);
+            tex_r = tex_color[11:8];
+            tex_g = tex_color[7:4];
+            tex_b = tex_color[3:0];
+            wall_r = (tex_r * (wall_lit + 1)) >> 4;
+            wall_g = (tex_g * (wall_lit + 1)) >> 4;
+            wall_b = (tex_b * (wall_lit + 1)) >> 4;
 
         sprite_dx = $signed({2'b0, 16'd1408}) - $signed({2'b0, player_x});
         sprite_dy = $signed({2'b0, 16'd1152}) - $signed({2'b0, player_y});
@@ -330,13 +351,13 @@ module vga_raycast_demo(
             vga_r = 4'd1; vga_g = 4'd12; vga_b = 4'd15;
         end else if (hit) begin
             if (hit_tile_x[1] ^ hit_tile_y[1] ^ side ^ vc[4]) begin
-                vga_r = side ? (wall_r_tex >> 1) : wall_r_tex;
-                vga_g = wall_g_tex;
-                vga_b = wall_b_tex;
+                vga_r = side ? (wall_r >> 1) : wall_r;
+                vga_g = wall_g;
+                vga_b = wall_b;
             end else begin
-                vga_r = wall_r_tex >> 2;
-                vga_g = side ? (wall_g_tex >> 1) : wall_g_tex;
-                vga_b = wall_b_tex >> 2;
+                vga_r = wall_r >> 2;
+                vga_g = side ? (wall_g >> 1) : wall_g;
+                vga_b = wall_b >> 2;
             end
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
