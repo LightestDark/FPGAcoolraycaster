@@ -271,7 +271,7 @@ module vga_raycast_demo(
                     if (mortar) idx = 4'd3;
                     else if (edge_flag) idx = 4'd6;
                     else if (band) idx = 4'd9;
-                    else idx = 4'd10 + noise[1:0];
+                    else idx = 4'd10 + {2'b00, noise[1:0]};
                 end
             endcase
             tex_index = idx;
@@ -382,7 +382,7 @@ module vga_raycast_demo(
 
         wall_type = wall_type_at(hit_tile_x, hit_tile_y);
         wall_tex_id = 2'd0;
-        tex_u = side ? hit_y_fp[7:0] : hit_x_fp[7:0];
+        tex_u = side ? {1'b0, hit_y_fp[7:0]} : {1'b0, hit_x_fp[7:0]};
         wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
         if (vc < wall_top) tex_v = 9'd0;
         else if (vc > wall_bottom) tex_v = 9'd511;
