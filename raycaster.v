@@ -448,7 +448,6 @@ module vga_raycast_demo(
         end else begin
             wall_r = wall_r_base - 4'd1;
         end
-        if (wall_r > 4'd15) wall_r = 4'd15;
         if (wall_r < 4'd2) wall_r = 4'd2;
         wall_g = wall_r;
         wall_b = wall_r;
@@ -464,7 +463,6 @@ module vga_raycast_demo(
         end
         if (hc[4] ^ demo_tick[5]) begin
             wall_r = wall_r + 4'd1;
-            if (wall_r > 4'd15) wall_r = 4'd15;
             wall_g = wall_r;
             wall_b = wall_r;
         end
@@ -482,7 +480,7 @@ module vga_raycast_demo(
                   (vc < 10'd140);
         star_on2 = (((sky_x2[7:0] * 8'd23 + vc[7:0] * 8'd41 + 8'd7) & 8'hff) < 8'd2) &&
                    (vc < 10'd140);
-        dust_on = (((hc[7:0] + demo_tick[7:0]) ^ (vc[7:0] + demo_tick[5:0])) & 8'h3f) == 8'h00;
+        dust_on = ((((hc[7:0] + demo_tick[7:0]) ^ (vc[7:0] + {2'b00, demo_tick[5:0]})) & 8'h3f) == 8'h00);
         meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
         meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
         meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
@@ -535,9 +533,6 @@ module vga_raycast_demo(
             vga_r = vga_r + 4'd2;
             vga_g = vga_g + 4'd2;
             vga_b = vga_b + 4'd2;
-            if (vga_r > 4'd15) vga_r = 4'd15;
-            if (vga_g > 4'd15) vga_g = 4'd15;
-            if (vga_b > 4'd15) vga_b = 4'd15;
         end
     end
 endmodule
