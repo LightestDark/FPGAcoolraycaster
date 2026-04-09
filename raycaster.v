@@ -298,8 +298,13 @@ module vga_raycast_demo(
         sprite_visible = (sprite_forward_s > 18'sd0) && (sprite_screen_x < 10'd640);
         sprite_on = sprite_visible && (hc >= (sprite_screen_x - sprite_half)) && (hc <= (sprite_screen_x + sprite_half))
                     && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
-        if (dist_steps > 9'd180) shade = 4'd1; else if (dist_steps > 9'd120) shade = 4'd3;
-        else if (dist_steps > 9'd80) shade = 4'd6; else if (dist_steps > 9'd40) shade = 4'd9; else shade = 4'd12;
+        if (dist_steps > 9'd200) shade = 4'd1;
+        else if (dist_steps > 9'd160) shade = 4'd2;
+        else if (dist_steps > 9'd120) shade = 4'd4;
+        else if (dist_steps > 9'd90) shade = 4'd6;
+        else if (dist_steps > 9'd60) shade = 4'd9;
+        else if (dist_steps > 9'd40) shade = 4'd11;
+        else shade = 4'd13;
         wall_half = (10'd180 / (dist_steps + 1)) + 10'd6;
         wall_top = 10'd240 - wall_half;
         wall_bottom = 10'd240 + wall_half;
