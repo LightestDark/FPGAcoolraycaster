@@ -268,6 +268,7 @@ module vga_raycast_demo(
         integer row_off;
         reg mortar;
         reg bevel;
+        reg course;
         reg inner;
         reg [3:0] idx;
         begin
@@ -276,10 +277,11 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-                    mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
-                    bevel = ((u_mod >= MORTAR_W) && (u_mod <= (MORTAR_W + 1))) ||
-                        ((v_mod >= MORTAR_W) && (v_mod <= (MORTAR_W + 1)));
-                    inner = u_mod[3] ^ v_mod[2];
+                        mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
+                        course = (v_mod == (BRICK_H / 2));
+                        bevel = ((u_mod >= MORTAR_W) && (u_mod <= (MORTAR_W + 1))) ||
+                            ((v_mod >= MORTAR_W) && (v_mod <= (MORTAR_W + 1))) || course;
+                        inner = u_mod[3] ^ v_mod[2] ^ brick_x[0];
             idx = 4'd9;
 
             case (tex_id)
@@ -440,7 +442,7 @@ module vga_raycast_demo(
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
         moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-        star_on = ((hc[4:0] ^ vc[5:1]) == 5'd0) && (hc[9:7] != 3'd0);
+        star_on = (((hc[7:0] ^ {vc[7:1], 1'b0}) + {3'b000, vc[4:0]}) == 8'd0) && (vc < 10'd140);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
