@@ -1,0 +1,17 @@
+# Build artifacts
+obj_dir/
+*.o
+*.a
+*.d
+
+# Generated binaries
+Vvga_*
+
+# Simulation outputs
+*.vcd
+*.vvp
+frame_*.ppm
+raycast.mp4
+
+# VPI modules
+*.vpi
