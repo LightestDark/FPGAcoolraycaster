@@ -276,13 +276,8 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-                                    mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W) ||
-                                             (v_mod >= (BRICK_H - MORTAR_W));
-                                    if (brick_y[0] == 0) begin
-                                        if (u_mod < MORTAR_W) mortar = 1'b1;
-                                    end else begin
-                                        if (u_mod >= (BRICK_W - MORTAR_W)) mortar = 1'b1;
-                                    end
+                                    mortar = (u_mod < MORTAR_W) || (u_mod >= (BRICK_W - MORTAR_W)) ||
+                                             (v_mod < MORTAR_W) || (v_mod >= (BRICK_H - MORTAR_W));
                                     bevel = (u_mod <= (MORTAR_W + 1)) || (u_mod >= (BRICK_W - MORTAR_W - 2)) ||
                                             (v_mod <= (MORTAR_W + 1)) || (v_mod >= (BRICK_H - MORTAR_W - 2));
                                     inner = u_mod[4] ^ v_mod[3] ^ brick_x[0];
