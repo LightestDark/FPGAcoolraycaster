@@ -515,7 +515,7 @@ module vga_raycast_demo(
                 vga_r = 4'd2; vga_g = 4'd2; vga_b = sky_base;
             end
         end else if (vc > wall_bottom) begin
-            water_g = 4'd3 + {2'b00, vc[8:7]} + {3'b000, cam_angle[7:6]};
+            water_g = 4'd3 + {2'b00, vc[8:7]} + {2'b00, cam_angle[7:6]};
             water_b = 4'd2 + {2'b00, vc[7:6]};
             if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
                 vga_r = 4'd0; vga_g = water_g + 4'd1; vga_b = water_b;
