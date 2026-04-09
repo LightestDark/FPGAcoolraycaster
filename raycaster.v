@@ -458,8 +458,8 @@ module vga_raycast_demo(
             wall_r = wall_r_base - 4'd1;
         end
         if (wall_r < 4'd2) wall_r = 4'd2;
-        wall_g = wall_r;
-        wall_b = wall_r;
+        wall_g = (wall_r > 4'd1) ? (wall_r - 4'd1) : 4'd0;
+        wall_b = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
         fog_strength = (dist_steps > 9'd200) ? 4'd6 :
                        (dist_steps > 9'd160) ? 4'd4 :
                        (dist_steps > 9'd120) ? 4'd2 : 4'd0;
@@ -526,8 +526,8 @@ module vga_raycast_demo(
                 vga_r = 4'd2; vga_g = 4'd2; vga_b = sky_base;
             end
         end else if (vc > wall_bottom) begin
-            water_g = 4'd3 + {2'b00, vc[8:7]} + {2'b00, vc[6:5]} + {2'b00, cam_angle[7:6]};
-            water_b = 4'd2 + {2'b00, vc[7:6]} + {2'b00, vc[5:4]};
+            water_g = 4'd3 + {3'b000, vc[8:7]} + {3'b000, vc[6:5]} + {2'b00, cam_angle[7:6]};
+            water_b = 4'd2 + {3'b000, vc[7:6]};
             if (((hc[2:0] == (demo_tick[2:0] ^ cam_angle[2:0])) && (vc[2:0] == demo_tick[5:3])) ||
                 ((hc[4] ^ vc[3] ^ demo_tick[4]) && (hc[1:0] == (demo_tick[1:0] ^ cam_angle[1:0]))) ||
                 ((hc[3:0] == demo_tick[3:0]) && (vc[3:0] == (demo_tick[7:4] ^ cam_angle[3:0]))) ||
