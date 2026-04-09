@@ -180,7 +180,7 @@ module vga_raycast_demo(
     reg [1:0] wall_type;
     reg [1:0] wall_tex_id;
     reg [3:0] wall_r, wall_g, wall_b;
-    reg [6:0] tex_u, tex_v;
+    reg [8:0] tex_u, tex_v;
     reg [9:0] wall_h;
     reg [9:0] tex_v_full;
     reg [3:0] tex_idx;
@@ -250,26 +250,28 @@ module vga_raycast_demo(
 
     function automatic [3:0] tex_index;
         input [1:0] tex_id;
-        input [6:0] u;
-        input [6:0] v;
-        reg [6:0] u2;
+        input [8:0] u;
+        input [8:0] v;
+        reg [8:0] u2;
         reg mortar;
         reg edge_flag;
         reg band;
+        reg [3:0] noise;
         reg [3:0] idx;
         begin
-            u2 = u + (v[6] ? 7'd12 : 7'd0);
-            mortar = (u2[4:0] == 5'b00000) || (v[4:0] == 5'b00000);
-            edge_flag = (u2[4:0] == 5'b11111) || (v[4:0] == 5'b11111);
-            band = (u2[5] ^ v[5]);
-            idx = 4'd8;
+            u2 = u + (v[8] ? 9'd28 : 9'd0);
+            mortar = (u2[5:0] == 6'b000000) || (v[5:0] == 6'b000000);
+            edge_flag = (u2[5:0] == 6'b111111) || (v[5:0] == 6'b111111);
+            band = (u2[6] ^ v[6]);
+            noise = {u[2] ^ v[3], u[4] ^ v[1], u[1] ^ v[5], u[0] ^ v[2]};
+            idx = 4'd9;
 
             case (tex_id)
                 default: begin
-                    if (mortar) idx = 4'd2;
+                    if (mortar) idx = 4'd3;
                     else if (edge_flag) idx = 4'd6;
                     else if (band) idx = 4'd9;
-                    else idx = 4'd11;
+                    else idx = 4'd10 + noise[1:0];
                 end
             endcase
             tex_index = idx;
@@ -380,13 +382,13 @@ module vga_raycast_demo(
 
         wall_type = wall_type_at(hit_tile_x, hit_tile_y);
         wall_tex_id = 2'd0;
-        tex_u = side ? hit_y_fp[7:1] : hit_x_fp[7:1];
+        tex_u = side ? hit_y_fp[7:0] : hit_x_fp[7:0];
         wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
-        if (vc < wall_top) tex_v = 7'd0;
-        else if (vc > wall_bottom) tex_v = 7'd127;
+        if (vc < wall_top) tex_v = 9'd0;
+        else if (vc > wall_bottom) tex_v = 9'd511;
         else begin
-            tex_v_full = ((vc - wall_top) * 128) / wall_h;
-            tex_v = tex_v_full[6:0];
+            tex_v_full = ((vc - wall_top) * 512) / wall_h;
+            tex_v = {tex_v_full[8:0]};
         end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
@@ -400,7 +402,7 @@ module vga_raycast_demo(
         end else if (vc < wall_top) begin
             vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
         end else if (vc > wall_bottom) begin
-            vga_r = 4'd5 + {2'b00, vc[8:7]}; vga_g = 4'd2; vga_b = 4'd1;
+            vga_r = 4'd6 + {2'b00, vc[8:7]}; vga_g = 4'd2; vga_b = 4'd1;
         end else if (sprite_on) begin
             vga_r = 4'd8; vga_g = 4'd8; vga_b = 4'd8;
         end else if (hit) begin
