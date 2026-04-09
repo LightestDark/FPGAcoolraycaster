@@ -186,9 +186,10 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-        localparam BRICK_W = 48;
-        localparam BRICK_H = 24;
-        localparam MORTAR_W = 2;
+        localparam BRICK_W = 36;
+        localparam BRICK_H = 18;
+        localparam MORTAR_X = 3;
+        localparam MORTAR_Y = 2;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
     reg signed [17:0] sprite_forward_s, sprite_cross_s;
@@ -267,7 +268,6 @@ module vga_raycast_demo(
         integer brick_y;
         integer row_off;
         reg mortar;
-        reg bevel;
         reg inner;
         reg [3:0] idx;
         begin
@@ -276,17 +276,14 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-                                        mortar = (u_mod < MORTAR_W) || (u_mod >= (BRICK_W - MORTAR_W)) ||
-                                             (v_mod < MORTAR_W) || (v_mod >= (BRICK_H - MORTAR_W));
-                                        bevel = (u_mod == MORTAR_W) || (u_mod == (BRICK_W - MORTAR_W - 1)) ||
-                                            (v_mod == MORTAR_W) || (v_mod == (BRICK_H - MORTAR_W - 1));
-                                        inner = u_mod[4] ^ v_mod[2] ^ brick_x[0];
+                                            mortar = (u_mod < MORTAR_X) || (u_mod >= (BRICK_W - MORTAR_X)) ||
+                                                 (v_mod < MORTAR_Y) || (v_mod >= (BRICK_H - MORTAR_Y));
+                                            inner = u_mod[3] ^ v_mod[2] ^ brick_x[0];
             idx = 4'd9;
 
             case (tex_id)
                 default: begin
                     if (mortar) idx = 4'd2;
-                    else if (bevel) idx = 4'd5;
                     else if (brick_x[0] ^ brick_y[0]) idx = 4'd9;
                     else idx = 4'd10 + {3'b000, inner};
                 end
@@ -324,12 +321,10 @@ module vga_raycast_demo(
             g = 4'd6;
             case (idx)
                 4'd2: g = 4'd14;
-                4'd5: g = 4'd6;
                 4'd8: g = 4'd8;
                 4'd9: g = 4'd9;
                 4'd10: g = 4'd10;
-                4'd11: g = 4'd11;
-                4'd12: g = 4'd12;
+                4'd11: g = 4'd12;
                 default: g = 4'd7;
             endcase
             tex_palette = {g, g, g};
