@@ -195,6 +195,7 @@ module vga_raycast_demo(
     reg signed [15:0] sprite_off;
     reg [9:0] sprite_screen_x;
     reg [9:0] sprite_half;
+    reg [9:0] sprite_left, sprite_right;
     reg [9:0] sprite_top, sprite_bottom;
     reg [8:0] sprite_dist_steps;
     reg sprite_visible;
@@ -261,6 +262,7 @@ module vga_raycast_demo(
         integer brick_y;
         integer row_off;
         reg mortar;
+        reg bevel;
         reg [3:0] idx;
         begin
             brick_y = {23'd0, v} / BRICK_H;
@@ -268,16 +270,40 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-            mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
+                mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
+                bevel = ((u_mod >= MORTAR_W) && (u_mod <= (MORTAR_W + 1))) ||
+                    ((v_mod >= MORTAR_W) && (v_mod <= (MORTAR_W + 1)));
             idx = 4'd9;
 
             case (tex_id)
                 default: begin
                     if (mortar) idx = 4'd3;
+                    else if (bevel) idx = 4'd6;
                     else idx = 4'd8 + {2'b00, (brick_x[0] ^ brick_y[0])};
                 end
             endcase
             tex_index = idx;
+        end
+    endfunction
+
+    function automatic [3:0] shade_from_dist;
+        input [8:0] d;
+        begin
+            case (d[8:5])
+                4'd0: shade_from_dist = 4'd14;
+                4'd1: shade_from_dist = 4'd13;
+                4'd2: shade_from_dist = 4'd12;
+                4'd3: shade_from_dist = 4'd11;
+                4'd4: shade_from_dist = 4'd10;
+                4'd5: shade_from_dist = 4'd9;
+                4'd6: shade_from_dist = 4'd8;
+                4'd7: shade_from_dist = 4'd7;
+                4'd8: shade_from_dist = 4'd6;
+                4'd9: shade_from_dist = 4'd5;
+                4'd10: shade_from_dist = 4'd4;
+                4'd11: shade_from_dist = 4'd3;
+                default: shade_from_dist = 4'd2;
+            endcase
         end
     endfunction
 
@@ -304,9 +330,7 @@ module vga_raycast_demo(
     ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .hit_x_fp(hit_x_fp), .hit_y_fp(hit_y_fp), .dist_steps(dist_steps), .side(side));
 
     assign manual_active = manual_enable;
-    assign wall_lit = (dist_steps > 9'd120) ? (shade >> 3) :
-                      (dist_steps > 9'd90)  ? (shade >> 2) :
-                      (dist_steps > 9'd60)  ? (shade >> 1) : shade;
+    assign wall_lit = shade;
     assign ctrl_fwd = manual_active ? move_fwd : ~demo_tick[6];
     assign ctrl_back = manual_active ? move_back : 1'b0;
     assign ctrl_left = manual_active ? turn_left : 1'b0;
@@ -368,16 +392,12 @@ module vga_raycast_demo(
         if (sprite_half < 10'd6) sprite_half = 10'd6;
         sprite_top = 10'd240 - sprite_half;
         sprite_bottom = 10'd240 + sprite_half;
+        sprite_left = sprite_screen_x - sprite_half;
+        sprite_right = sprite_screen_x + sprite_half;
         sprite_visible = (sprite_forward_s > 18'sd0) && (sprite_screen_x < 10'd640);
         sprite_on = sprite_visible && (hc >= (sprite_screen_x - sprite_half)) && (hc <= (sprite_screen_x + sprite_half))
                     && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
-        if (dist_steps > 9'd200) shade = 4'd1;
-        else if (dist_steps > 9'd160) shade = 4'd2;
-        else if (dist_steps > 9'd120) shade = 4'd4;
-        else if (dist_steps > 9'd90) shade = 4'd6;
-        else if (dist_steps > 9'd60) shade = 4'd9;
-        else if (dist_steps > 9'd40) shade = 4'd11;
-        else shade = 4'd13;
+        shade = shade_from_dist(dist_steps);
         wall_half = (10'd320 / (dist_steps + 1)) + 10'd20;
         wall_top = 10'd240 - wall_half;
         wall_bottom = 10'd240 + wall_half;
@@ -392,6 +412,9 @@ module vga_raycast_demo(
             tex_v_full = ((vc - wall_top) * 512) / wall_h;
             tex_v = {tex_v_full[8:0]};
         end
+        if (dist_steps > 9'd140) begin
+            tex_v = {tex_v[8:1], 1'b0};
+        end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
@@ -404,13 +427,20 @@ module vga_raycast_demo(
         end else if (vc < wall_top) begin
             vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
         end else if (vc > wall_bottom) begin
-            if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[3] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
+            if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
                 vga_r = 4'd1; vga_g = 4'd7; vga_b = 4'd1;
+            end else if ((hc[4] ^ vc[5]) && (hc[2:0] == 3'd0)) begin
+                vga_r = 4'd1; vga_g = 4'd6; vga_b = 4'd1;
             end else begin
-                vga_r = 4'd1; vga_g = 4'd5 + {2'b00, vc[8:7]}; vga_b = 4'd1;
+                vga_r = 4'd1; vga_g = 4'd4 + {2'b00, vc[8:7]}; vga_b = 4'd1;
             end
         end else if (sprite_on) begin
-            vga_r = 4'd8; vga_g = 4'd8; vga_b = 4'd8;
+            if (hc <= (sprite_left + 10'd1) || hc >= (sprite_right - 10'd1) ||
+                vc <= (sprite_top + 10'd1) || vc >= (sprite_bottom - 10'd1)) begin
+                vga_r = 4'd4; vga_g = 4'd4; vga_b = 4'd4;
+            end else begin
+                vga_r = 4'd10; vga_g = 4'd10; vga_b = 4'd10;
+            end
         end else if (hit) begin
             vga_r = side ? (wall_r - (wall_r >> 2)) : wall_r;
             vga_g = vga_r;
