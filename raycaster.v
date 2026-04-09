@@ -416,10 +416,10 @@ module vga_raycast_demo(
         if (vc < wall_top) tex_v = 9'd0;
         else if (vc > wall_bottom) tex_v = 9'd511;
         else begin
-            tex_v_full = ((vc - wall_top) * 512) / wall_h;
+            tex_v_full = (((vc - wall_top) * 512) + (wall_h >> 1)) / wall_h;
             tex_v = {tex_v_full[8:0]};
         end
-        if (dist_steps > 9'd200) begin
+        if (dist_steps > 9'd240) begin
             tex_v = {tex_v[8:1], 1'b0};
         end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
