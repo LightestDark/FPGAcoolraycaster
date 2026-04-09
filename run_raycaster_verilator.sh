@@ -19,6 +19,7 @@ if ! command -v sdl2-config >/dev/null 2>&1; then
 fi
 
 rm -f raycast.mp4
+rm -rf obj_dir
 
 SDL_CFLAGS=$(sdl2-config --cflags)
 SDL_LIBS=$(sdl2-config --libs)

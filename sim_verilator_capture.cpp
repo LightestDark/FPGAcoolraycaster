@@ -15,7 +15,7 @@ static FILE *open_ffmpeg_pipe(int width, int height, int fps, const char *out_na
 {
     char command[512];
     std::snprintf(command, sizeof(command),
-        "ffmpeg -hide_banner -loglevel error -nostats -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r %d -i - -vf format=yuv420p %s",
+        "ffmpeg -hide_banner -loglevel error -nostats -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r %d -i - -vf format=yuv420p -preset ultrafast -threads 0 %s",
         width, height, fps, out_name);
     return popen(command, "w");
 }
@@ -59,9 +59,9 @@ int main(int argc, char **argv)
     const char *env_fps = std::getenv("CAP_FPS");
     const char *env_shift = std::getenv("CAP_SAMPLE_SHIFT");
 
-    int frames = env_frames ? std::atoi(env_frames) : 600;
+    int frames = env_frames ? std::atoi(env_frames) : 900;
     int fps = env_fps ? std::atoi(env_fps) : 60;
-    int sample_shift = env_shift ? std::atoi(env_shift) : 1; // 0=640x480, 1=320x240, 2=160x120
+    int sample_shift = env_shift ? std::atoi(env_shift) : 0; // 0=640x480, 1=320x240, 2=160x120
 
     if (frames <= 0) frames = 600;
     if (fps <= 0) fps = 60;
