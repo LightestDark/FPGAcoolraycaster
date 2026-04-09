@@ -487,7 +487,7 @@ module vga_raycast_demo(
         moon_rim = moon_disk && (moon_dist > 24'd784);
         sky_x1 = {1'b0, hc} + {2'b0, cam_angle} + {4'b0000, demo_tick[6:0]};
         sky_x2 = {1'b0, hc} + {3'b000, cam_angle[7:1]} + {5'b00000, demo_tick[5:0]};
-        star_on = (((sky_x1[7:0] * 8'd197 + vc[7:0] * 8'd73 + (sky_x1[7:0] ^ vc[7:0])) & 8'hff) < 8'd4) &&
+        star_on = (((sky_x1[7:0] * 8'd197 + vc[7:0] * 8'd73 + (sky_x1[7:0] ^ vc[7:0])) & 8'hff) < 8'd2) &&
               (vc < 10'd140);
         star_on2 = 1'b0;
         dust_on = 1'b0;
