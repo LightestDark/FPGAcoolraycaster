@@ -1,0 +1,590 @@
+FPGA VGA Raycaster Project - Progress and Technical Report Notes
+Date: 2026-04-09
+Workspace: /home/ak/verilog-project
+
+============================================================
+1) Project Goal and Current Status
+============================================================
+Goal:
+Build a visually impressive FPGA VGA project using Verilog, simulated with Icarus Verilog and viewed in GTKWave.
+
+Current implementation status:
+- Core source is consolidated into [raycaster.v](raycaster.v) to reduce file count.
+- VGA timing generator is complete and verified.
+- Trig LUT and map ROM are complete and verified.
+- First ray traversal core (ray_dda) is complete and verified in simulation.
+- Initial integrated VGA raycast demo top-level is implemented and verified in simulation.
+- The demo now renders a true per-column raycast view with wall slices, sky, floor, movement controls, simple wall texturing, and distance fog.
+- Map expanded to a 32x32 environment with more internal corridors and blocks.
+- Movement step size increased for a more impactful POV shift.
+- Auto-demo mode is implemented: if no controls are pressed, camera motion runs automatically for judge/demo presentation.
+- A live interactive Doom-style viewer is available in [doom_demo.py](doom_demo.py) for arrow-key movement and visible wall rendering.
+- Codebase has been streamlined for fewer source files and stronger verification.
+
+What is already proven by simulation:
+- Correct 640x480 sync timing behavior in waveforms.
+- Correct sin/cos lookup values at key quadrants.
+- Correct map wall lookups.
+- Rays march from a player position and report first wall hit tile and distance steps.
+- The integrated VGA demo renders full raycast columns with distance-based wall height, movement, texture variation, and fog.
+- The interactive viewer renders moving walls in real time with arrow-key controls.
+
+============================================================
+2) File-by-File Explanation
+============================================================
+Note:
+- The standalone source files below were consolidated into [raycaster.v](raycaster.v) to keep the project compact.
+- They are listed here as module descriptions, not as separate current source files.
+
+A) vga_sync.v
+Purpose:
+- Generates VGA horizontal/vertical timing counters and sync pulses for 640x480@60Hz.
+
+Inputs:
+- clk_25: pixel clock (~25 MHz).
+- rst: reset.
+
+Outputs:
+- hsync: active-low horizontal sync.
+- vsync: active-low vertical sync.
+- hc: horizontal pixel counter (0..799).
+- vc: vertical line counter (0..524).
+- active: high only in visible region (hc<640 and vc<480).
+
+Internal behavior:
+- Counters increment each pixel clock.
+- Horizontal wraps every 800 clocks.
+- Vertical increments when horizontal wraps.
+- Sync windows:
+  - HS low from hc=656 to 751
+  - VS low from vc=490 to 491
+
+Dependencies:
+- None (standalone timing module).
+
+
+B) tb_vga_sync.v
+Purpose:
+- Testbench for vga_sync.v.
+
+Behavior:
+- Generates a 25 MHz clock (40 ns period).
+- Asserts reset briefly.
+- Dumps waveforms to vga_sync.vcd.
+- Runs enough time for 3 full scan lines.
+
+Dependencies:
+- Instantiates vga_sync.
+
+Generated artifact:
+- vga_sync.vcd
+
+
+C) sin_cos_lut.v
+Purpose:
+- 256-entry angle lookup table for sine and cosine.
+
+Interface:
+- Input: angle[7:0] (0..255 maps to 0..360 degrees).
+- Outputs: sin_out and cos_out in signed Q1.14 scale (~ +/-16384).
+
+Internal behavior:
+- Tables are initialized with $sin/$cos and $rtoi in an initial block.
+- Combinational lookup returns values for current angle.
+
+Dependencies:
+- None.
+
+Usage notes:
+- Good for direction vectors in a raycaster (fixed-point friendly).
+
+
+D) map_rom.v
+Purpose:
+- Stores 16x16 maze map where 1=wall, 0=floor.
+
+Interface:
+- Inputs: tile_x[3:0], tile_y[3:0]
+- Output: wall
+
+Internal behavior:
+- 16 rows of 16-bit constants.
+- wall = map[tile_y][tile_x]
+
+Dependencies:
+- None.
+
+Usage notes:
+- Shared map definition used by tb_lut_map and conceptually by ray traversal.
+
+
+E) tb_lut_map.v
+Purpose:
+- Combined testbench for sin_cos_lut and map_rom.
+
+Behavior:
+- Tests sin/cos at angles 0,64,128,192.
+- Tests map samples at (0,0), (15,15), (1,1).
+- Dumps lut_map.vcd and prints values.
+
+Dependencies:
+- Instantiates sin_cos_lut and map_rom.
+
+Generated artifacts:
+- lut_map.vcd
+- lut_map.vvp (compiled simulation executable)
+
+
+F) ray_dda.v
+Purpose:
+- First-pass ray march core to find first wall hit and an approximate ray distance in steps.
+
+Interface:
+Inputs:
+- ray_x_q8_8, ray_y_q8_8: ray origin in Q8.8 fixed-point tile units.
+- dir_x_q1_14, dir_y_q1_14: direction vector in Q1.14 fixed-point.
+Outputs:
+- hit: 1 if collision found.
+- hit_tile_x, hit_tile_y: tile coordinates of first hit.
+- dist_steps: step count to hit.
+- side: rough indicator of last major stepping axis.
+
+Internal behavior:
+- Uses 1/16 tile per step (STEP_FRAC=16 in Q8.8).
+- Marches up to MAX_STEPS=320.
+- Tests map occupancy via internal is_wall() function (same map constants embedded).
+- Stops at first wall or out-of-bounds.
+
+Dependencies:
+- Standalone for now (does not instantiate map_rom directly).
+
+Design note:
+- This is a simulation-friendly stepping core, not yet a cycle-accurate pipelined hardware engine.
+
+
+G) tb_ray_dda.v
+Purpose:
+- Testbench for ray_dda.
+
+Behavior:
+- Sets player origin at tile (1.5,1.5) in Q8.8.
+- Casts 3 rays: East, South, North-West.
+- Prints hit tile and distance steps.
+- Dumps ray_dda.vcd.
+
+Dependencies:
+- Instantiates ray_dda.
+
+Generated artifacts:
+- ray_dda.vcd
+- ray_dda.vvp
+
+
+H) write_files.py
+Purpose:
+- Temporary helper script used during file recovery to rewrite sources.
+
+Current relevance:
+- Not required for normal build/sim flow.
+- Can be kept for reference or removed for cleanliness.
+
+Update:
+- Removed to keep the source tree concise.
+
+
+I) vga_raycast_demo.v
+Purpose:
+- Integrated visual demo module that combines VGA timing, angle lookup, ray hit estimation, movement, and wall shading.
+
+Interface:
+- Inputs: clk_25, rst, move_fwd, move_back, turn_left, turn_right, strafe_left, strafe_right
+- Outputs: hsync, vsync, vga_r[3:0], vga_g[3:0], vga_b[3:0]
+
+Internal behavior:
+- Uses vga_sync counters to derive a ray angle per screen column.
+- Uses sin_cos_lut for direction vectors.
+- Uses ray_dda to estimate wall hit distance.
+- Updates player position and angle once per frame from movement controls.
+- Converts distance to wall slice height and applies side-based shading, checker texture, and distance fog.
+- Draws sky and floor gradients outside wall slice region.
+
+Dependencies:
+- vga_sync.v
+- sin_cos_lut.v
+- ray_dda.v
+
+
+J) tb_vga_raycast_demo.v
+Purpose:
+- Testbench for the integrated VGA raycast demo.
+
+Behavior:
+- Generates clock/reset.
+- Drives movement controls to verify player motion and rotation.
+- Dumps vga_raycast_demo.vcd.
+- Runs long enough to cover multiple frames and capture motion.
+- Prints sampled RGB values for selected center-line columns.
+
+Dependencies:
+- vga_raycast_demo.v
+
+
+K) tb_vga_judge_demo.v
+Purpose:
+- Judge-facing proof test that validates autonomous movement and visible scene change without manual inputs.
+
+Behavior:
+- Leaves all movement inputs at 0.
+- Confirms player position and camera angle change over time (auto-demo mode).
+- Confirms center-line RGB samples vary while the camera moves.
+- Dumps vga_judge_demo.vcd.
+
+
+L) Generated simulation artifacts
+
+
+- vga_sync.vvp / vga_sync.vcd
+- lut_map.vvp / lut_map.vcd
+- ray_dda.vvp / ray_dda.vcd
+- vga_raycast_demo.vvp / vga_raycast_demo.vcd
+- vga_judge_demo.vvp / vga_judge_demo.vcd
+
+These are outputs, not source modules.
+
+============================================================
+3) Dependency Graph (Source-Level)
+============================================================
+tb_vga_sync.v  --> raycaster.v:vga_sync
+tb_lut_map.v   --> raycaster.v:sin_cos_lut, raycaster.v:map_rom
+tb_ray_dda.v   --> raycaster.v:ray_dda
+tb_vga_raycast_demo.v --> raycaster.v:vga_raycast_demo --> raycaster.v:vga_sync, raycaster.v:sin_cos_lut, raycaster.v:ray_dda
+tb_vga_judge_demo.v --> raycaster.v:vga_raycast_demo(auto-demo)
+
+Conceptual runtime architecture (next integration stage):
+vga_sync + camera state + sin_cos_lut + ray_dda + map_rom + column shader --> VGA RGB output
+
+Current implemented architecture:
+vga_sync + sin_cos_lut + ray_dda + movement + texture/fog shader --> vga_raycast_demo RGB output
+
+============================================================
+4) Build and Simulation Commands
+============================================================
+A) VGA timing test:
+iverilog -o vga_sync.vvp raycaster.v tb_vga_sync.v
+vvp vga_sync.vvp
+gtkwave vga_sync.vcd
+
+B) LUT + map test:
+iverilog -o lut_map.vvp raycaster.v tb_lut_map.v
+vvp lut_map.vvp
+gtkwave lut_map.vcd
+
+C) Ray DDA test:
+iverilog -o ray_dda.vvp raycaster.v tb_ray_dda.v
+vvp ray_dda.vvp
+gtkwave ray_dda.vcd
+
+D) Integrated VGA raycast demo test:
+iverilog -o vga_raycast_demo.vvp raycaster.v tb_vga_raycast_demo.v
+vvp vga_raycast_demo.vvp
+gtkwave vga_raycast_demo.vcd
+
+E) Judge auto-demo test:
+iverilog -o vga_judge_demo.vvp raycaster.v tb_vga_judge_demo.v
+vvp vga_judge_demo.vvp
+gtkwave vga_judge_demo.vcd
+
+============================================================
+5) Verified Simulation Outputs (Captured)
+============================================================
+LUT/MAP output:
+- angle=0:   sin=0 cos=16384
+- angle=64:  sin=16384 cos=0
+- angle=128: sin=0 cos=-16384
+- angle=192: sin=-16384 cos=0
+- map[0][0]=1 (expect 1)
+- map[15][15]=1 (expect 1)
+- map[1][1]=0 (expect 0)
+
+Ray DDA output:
+- EAST:  hit=1 tile=(15,1) dist=88 side=0
+- SOUTH: hit=1 tile=(1,15) dist=88 side=1
+- NW:    hit=1 tile=(0,0) dist=9  side=1
+
+Integrated VGA raycast output samples:
+- sample vc=240 hc=80  rgb=9,1,4
+- sample vc=240 hc=160 rgb=6,0,12
+- sample vc=240 hc=320 rgb=0,0,1
+- sample vc=240 hc=480 rgb=6,0,12
+- sample vc=240 hc=560 rgb=9,1,4
+
+Refinement regression (self-checking):
+- PASS tb_vga_sync
+- PASS tb_lut_map
+- PASS tb_ray_dda
+- PASS tb_vga_raycast_demo
+- Movement regression: player position and angle advance under controls.
+- PASS tb_vga_judge_demo player=(574,393) angle=6
+
+Interpretation:
+- Rays correctly travel and hit expected boundary walls.
+- Distances are step-based and suitable for initial wall-height derivation.
+
+============================================================
+6) Debugging Timeline and What Was Fixed
+============================================================
+Problem 1:
+- Icarus reported: "No top level modules, and no -s option."
+Root cause:
+- Some .v files accidentally contained shell heredoc command text instead of Verilog source.
+Fix:
+- Replaced corrupted file contents in sin_cos_lut.v, map_rom.v, tb_lut_map.v with valid Verilog modules.
+
+Problem 2:
+- Ray DDA initially returned immediate hit at distance 0.
+Root cause:
+- Ray origin was placed inside a wall tile.
+Fix:
+- Updated testbench player origin to empty tile (1.5,1.5).
+
+Problem 3:
+- Some rays returned no hit.
+Root cause:
+- MAX_STEPS too small for long traversals across map.
+Fix:
+- Increased MAX_STEPS from 96 to 320.
+
+Result:
+- All current simulations now compile and produce expected outputs.
+- The project now includes a first complete integrated rendering path in simulation.
+
+============================================================
+7) Engineering Approach Used
+============================================================
+Approach summary:
+1. Stabilize base video timing first (vga_sync).
+2. Validate math/data building blocks independently (sin_cos_lut, map_rom).
+3. Implement and verify ray collision core in isolation (ray_dda).
+4. Use testbenches and VCD traces at each stage before integration.
+
+Why this approach:
+- Reduces integration risk.
+- Makes bugs local and easier to diagnose.
+- Produces report-friendly evidence for each subsystem.
+
+Verification method:
+- For timing logic: inspect waveforms in GTKWave.
+- For LUT/ROM/data path: compare printed numeric checkpoints to expected values.
+- For traversal logic: verify hit tiles and distance progression from known positions.
+
+Refinement pass method:
+- Converted testbenches to pass/fail style with explicit checks.
+- Fixed timing check alignment for registered sync outputs.
+- Tightened types (signed LUT outputs) and cleaned comments.
+- Re-ran full regression after each change.
+
+============================================================
+8) What Each Existing File Depends On (Quick Table)
+============================================================
+vga_sync.v: none
+
+tb_vga_sync.v:
+- depends on: vga_sync.v
+- outputs: vga_sync.vcd
+
+sin_cos_lut.v: none
+
+map_rom.v: none
+
+tb_lut_map.v:
+- depends on: sin_cos_lut.v, map_rom.v
+- outputs: lut_map.vcd
+
+ray_dda.v:
+- depends on: internal embedded map constants
+- outputs: combinational hit info
+
+tb_ray_dda.v:
+- depends on: ray_dda.v
+- outputs: ray_dda.vcd
+
+write_files.py:
+- optional helper only
+
+============================================================
+9) Next Steps to Reach the Wow-Factor Demo
+============================================================
+Step 1:
+- Replace current demo shading with a hardware-oriented per-column engine that computes wall height once per column and reuses it across rows.
+
+Step 2:
+- Create top module that combines:
+  - vga_sync timing
+  - camera/player state
+  - sin/cos direction generation
+  - per-column ray cast
+  - RGB output generation
+
+Step 3:
+- Movement controls are now implemented. Next refinement can map them to real buttons/keys on FPGA hardware.
+
+Step 4:
+- Visual polish is now partially implemented with simple wall texturing and distance fog.
+- Remaining polish options:
+  - floor/ceiling gradient refinement
+  - skybox color split
+  - mini-map overlay (optional)
+
+If you want, the next useful step is to map the movement controls to real FPGA buttons and add richer wall/floor textures.
+
+============================================================
+10) Report Writing Tips You Can Use Directly
+============================================================
+Include these sections in your final report:
+- System objective and constraints (640x480 timing, fixed-point arithmetic)
+- Modular architecture and why testbenches were split
+- Verification evidence (waveform snapshots + console output)
+- Debug history and root-cause analysis
+- Resource/performance considerations for eventual synthesis
+- Planned enhancements and expected visual impact
+- Planned enhancements and expected visual impact
+
+============================================================
+11) Smoke Test Checklist
+============================================================
+Run these after every code refinement:
+- iverilog -o vga_sync.vvp raycaster.v tb_vga_sync.v && vvp vga_sync.vvp
+- iverilog -o lut_map.vvp raycaster.v tb_lut_map.v && vvp lut_map.vvp
+- iverilog -o ray_dda.vvp raycaster.v tb_ray_dda.v && vvp ray_dda.vvp
+- iverilog -o vga_raycast_demo.vvp raycaster.v tb_vga_raycast_demo.v && vvp vga_raycast_demo.vvp
+- iverilog -o vga_judge_demo.vvp raycaster.v tb_vga_judge_demo.v && vvp vga_judge_demo.vvp
+
+Expected result:
+- PASS tb_vga_sync
+- PASS tb_lut_map
+- PASS tb_ray_dda
+- PASS tb_vga_raycast_demo
+- PASS tb_vga_judge_demo
+
+============================================================
+12) Judge Demo Runbook
+============================================================
+Objective:
+- Show a moving raycast scene with no manual interaction required.
+
+Live demo sequence:
+1. Compile and run:
+  iverilog -o vga_judge_demo.vvp raycaster.v tb_vga_judge_demo.v
+  vvp vga_judge_demo.vvp
+2. Show PASS line proving movement and camera turn happened.
+3. Open waveform:
+  gtkwave vga_judge_demo.vcd
+4. In GTKWave, add these signals:
+  - uut.player_x, uut.player_y, uut.cam_angle
+  - uut.sync_i.hc, uut.sync_i.vc, uut.vga_r, uut.vga_g, uut.vga_b
+5. Explain to judges:
+  - The camera moves autonomously.
+  - Raycast wall heights and colors change continuously.
+  - Fog and wall patterning provide extra visual depth.
+
+============================================================
+13) Visual Frame Export (Non-Waveform Demo)
+============================================================
+Purpose:
+- Produce an actual rendered image from the VGA output so judges can see the scene directly.
+
+Commands:
+- iverilog -o vga_frame_dump.vvp raycaster.v tb_vga_frame_dump.v
+- vvp vga_frame_dump.vvp
+
+Expected result:
+- PASS tb_vga_frame_dump wrote judge_frame.ppm (307200 pixels)
+
+Generated files:
+- judge_frame.ppm (rendered 640x480 frame)
+- vga_frame_dump.vcd (optional waveform debug)
+
+How to present:
+- Open judge_frame.ppm in an image viewer and show that it is a rendered raycast scene.
+- Use this alongside the PASS line for objective proof.
+
+============================================================
+14) Live Interactive Doom Demo
+============================================================
+Purpose:
+- Show a true Doom-style moving wall scene with arrow-key control.
+
+Command:
+- python3 doom_demo.py
+
+Controls:
+- Up/Down: move forward/back
+- Left/Right: turn
+- A/D: strafe left/right
+- Escape: quit
+
+What judges should see:
+- Continuous wall rendering
+- Real movement and rotation
+- Minimap feedback
+- Distance fog and simple wall texture variation
+
+============================================================
+15) Verilog-Only Animated Demo (No Python, No FPGA)
+============================================================
+Purpose:
+- Generate a short sequence of rendered frames using only Verilog + Icarus.
+
+Command:
+- iverilog -o vga_frame_sequence.vvp raycaster.v tb_vga_frame_sequence.v
+- vvp vga_frame_sequence.vvp
+
+Expected result:
+- PASS tb_vga_frame_sequence wrote 1000 frames
+
+Output:
+- frame_0000.ppm ... frame_0999.ppm
+
+How to present:
+- Open the frames as a slideshow or flipbook to show smooth raycast motion.
+
+Optional video conversion (if ffmpeg is available):
+- ffmpeg -framerate 8 -i frame_%04d.ppm -vf format=yuv420p raycast.mp4
+
+Helper script:
+- run_raycaster_demo.sh
+  - deletes old frames/video
+  - runs live keyboard demo
+  - generates 1000-frame sequence
+  - builds and opens raycast.mp4 if ffmpeg is installed
+
+If mpv has GPU errors, run:
+- mpv --vo=x11 --hwdec=no raycast.mp4
+
+============================================================
+16) Icarus-First Live Keyboard Demo (VPI)
+============================================================
+Purpose:
+- Use Icarus Verilog with a VPI module to accept real-time keyboard input.
+
+Files:
+- vpi_keyboard.c (VPI keyboard hook)
+- tb_vga_vpi_demo.v (Icarus testbench that reads keys)
+
+Build and run:
+- gcc -shared -fPIC -o vpi_keyboard.vpi vpi_keyboard.c
+- iverilog -o vga_vpi_demo.vvp raycaster.v tb_vga_vpi_demo.v
+- vvp -M. -m vpi_keyboard vga_vpi_demo.vvp
+
+Keys:
+- W/S: forward/back
+- Q/E: turn left/right
+- A/D: strafe left/right
+- ESC: exit
+
+Notes:
+- This is the most Icarus-centric real-time input path.
+- Keyboard input is polled once per frame to keep motion smooth.
+- Terminal now prints keymask per frame when keys are pressed for clear feedback.
+
+End of report notes.
