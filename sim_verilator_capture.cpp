@@ -59,11 +59,15 @@ int main(int argc, char **argv)
     const char *env_fps = std::getenv("CAP_FPS");
     const char *env_shift = std::getenv("CAP_SAMPLE_SHIFT");
     const char *env_shift_y = std::getenv("CAP_SAMPLE_SHIFT_Y");
+    const char *env_crop_top = std::getenv("CAP_CROP_TOP");
+    const char *env_crop_bottom = std::getenv("CAP_CROP_BOTTOM");
 
     int frames = env_frames ? std::atoi(env_frames) : 900;
     int fps = env_fps ? std::atoi(env_fps) : 60;
     int sample_shift = env_shift ? std::atoi(env_shift) : 0; // 0=640x480, 1=320x240, 2=160x120
     int sample_shift_y = env_shift_y ? std::atoi(env_shift_y) : 1;
+    int crop_top = env_crop_top ? std::atoi(env_crop_top) : 60;
+    int crop_bottom = env_crop_bottom ? std::atoi(env_crop_bottom) : 40;
 
     if (frames <= 0) frames = 600;
     if (fps <= 0) fps = 60;
@@ -71,9 +75,15 @@ int main(int argc, char **argv)
     if (sample_shift > 3) sample_shift = 3;
     if (sample_shift_y < 0) sample_shift_y = 0;
     if (sample_shift_y > 4) sample_shift_y = 4;
+    if (crop_top < 0) crop_top = 0;
+    if (crop_bottom < 0) crop_bottom = 0;
+    if (crop_top + crop_bottom >= 480) {
+        crop_top = 0;
+        crop_bottom = 0;
+    }
 
     const int cap_w = 640 >> sample_shift;
-    const int cap_h = 480 >> sample_shift_y;
+    const int cap_h = (480 - crop_top - crop_bottom) >> sample_shift_y;
 
     Vvga_raycast_demo top;
     vluint64_t sim_time = 0;
@@ -104,9 +114,10 @@ int main(int argc, char **argv)
     bool quit_request = false;
 
     std::printf("Controls: W/S forward/back, A/D turn, Q/E strafe, ESC to stop\n");
-    std::printf("Capture: %d frames @ %d fps, sample_shift=%d, sample_shift_y=%d (%dx%d)\n",
-        frames, fps, sample_shift, sample_shift_y, cap_w, cap_h);
+    std::printf("Capture: %d frames @ %d fps, sample_shift=%d, sample_shift_y=%d, crop_top=%d, crop_bottom=%d (%dx%d)\n",
+        frames, fps, sample_shift, sample_shift_y, crop_top, crop_bottom, cap_w, cap_h);
 
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
         window = SDL_CreateWindow("raycaster live",
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -204,6 +215,9 @@ int main(int argc, char **argv)
         if (top.hc < 640 && top.vc < 480) {
             if (((top.hc & ((1 << sample_shift) - 1)) == 0) &&
                 ((top.vc & ((1 << sample_shift_y) - 1)) == 0)) {
+                if (top.vc < crop_top || top.vc >= (480 - crop_bottom)) {
+                    continue;
+                }
                 unsigned char rgb[3];
                 rgb[0] = static_cast<unsigned char>(top.vga_r * 17);
                 rgb[1] = static_cast<unsigned char>(top.vga_g * 17);
