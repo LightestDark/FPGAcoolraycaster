@@ -320,12 +320,12 @@ module vga_raycast_demo(
         begin
             g = 4'd6;
             case (idx)
-                4'd2: g = 4'd14;
-                4'd8: g = 4'd8;
-                4'd9: g = 4'd9;
-                4'd10: g = 4'd10;
-                4'd11: g = 4'd12;
-                default: g = 4'd7;
+                4'd2: g = 4'd3;
+                4'd8: g = 4'd10;
+                4'd9: g = 4'd11;
+                4'd10: g = 4'd12;
+                4'd11: g = 4'd13;
+                default: g = 4'd9;
             endcase
             tex_palette = {g, g, g};
         end
@@ -436,8 +436,8 @@ module vga_raycast_demo(
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
         moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-        star_on = (((hc * 10'd73 + vc * 10'd151 + 10'd29) ^ (hc << 3)) & 10'h3ff) < 10'd2 &&
-              (vc < 10'd140);
+          star_on = (((hc * 10'd131 + vc * 10'd73 + (hc ^ vc) * 10'd17) & 10'h3ff) < 10'd2) &&
+                (vc < 10'd140);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
