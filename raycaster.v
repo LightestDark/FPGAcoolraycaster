@@ -167,6 +167,18 @@ module vga_raycast_demo(
     reg [7:0] cam_angle;
     reg [15:0] demo_tick;
     reg signed [15:0] move_dx, move_dy;
+    reg [1:0] wall_type;
+    reg [3:0] wall_r, wall_g, wall_b;
+    reg signed [17:0] sprite_dx, sprite_dy;
+    reg signed [31:0] sprite_forward, sprite_cross;
+    reg signed [17:0] sprite_forward_s, sprite_cross_s;
+    reg signed [15:0] sprite_off;
+    reg [9:0] sprite_screen_x;
+    reg [9:0] sprite_half;
+    reg [9:0] sprite_top, sprite_bottom;
+    reg [8:0] sprite_dist_steps;
+    reg sprite_visible;
+    reg sprite_on;
     wire manual_active;
     wire ctrl_fwd, ctrl_back, ctrl_left, ctrl_right, ctrl_strafe_l, ctrl_strafe_r;
 
@@ -186,6 +198,21 @@ module vga_raycast_demo(
                 wall_at = 1'b1;
             else
                 wall_at = 1'b0;
+        end
+    endfunction
+
+    function automatic [1:0] wall_type_at;
+        input [4:0] tx;
+        input [4:0] ty;
+        begin
+            if (tx == 0 || ty == 0 || tx == 31 || ty == 31)
+                wall_type_at = 2'd1; // border
+            else if ((tx[2:0] == 0 && ty[2:0] != 0) || (ty[2:0] == 0 && tx[2:0] != 0))
+                wall_type_at = 2'd2; // grid lines
+            else if ((tx >= 10 && tx <= 14 && ty >= 10 && ty <= 14) || (tx >= 20 && tx <= 24 && ty >= 6 && ty <= 10))
+                wall_type_at = 2'd3; // inner rooms
+            else
+                wall_type_at = 2'd0;
         end
     endfunction
 
@@ -242,6 +269,31 @@ module vga_raycast_demo(
         sweep_shift = {sweep[8], sweep[8:1]};
         ray_angle_sum = $signed({1'b0, cam_angle}) + sweep_shift;
         ray_angle = ray_angle_sum[7:0];
+
+        wall_type = wall_type_at(hit_tile_x, hit_tile_y);
+        case (wall_type)
+            2'd1: begin wall_r = wall_lit; wall_g = 4'd2; wall_b = 4'd1; end
+            2'd2: begin wall_r = 4'd2; wall_g = wall_lit; wall_b = 4'd1; end
+            2'd3: begin wall_r = 4'd2; wall_g = 4'd2; wall_b = wall_lit; end
+            default: begin wall_r = wall_lit; wall_g = wall_lit >> 1; wall_b = 4'd0; end
+        endcase
+
+        sprite_dx = $signed({2'b0, 16'd1408}) - $signed({2'b0, player_x});
+        sprite_dy = $signed({2'b0, 16'd1152}) - $signed({2'b0, player_y});
+        sprite_forward = sprite_dx * $signed(move_cos) + sprite_dy * $signed(move_sin);
+        sprite_cross = sprite_dx * $signed(move_sin) - sprite_dy * $signed(move_cos);
+        sprite_forward_s = sprite_forward >>> 14;
+        sprite_cross_s = sprite_cross >>> 14;
+        sprite_dist_steps = (sprite_forward_s[17:0] > 0) ? sprite_forward_s[17:9] : 9'd0;
+        sprite_off = sprite_cross_s[15:0];
+        sprite_screen_x = 10'd320 + sprite_off[9:0];
+        sprite_half = (sprite_forward_s > 18'sd0) ? (10'd80 - sprite_forward_s[17:11]) : 10'd0;
+        if (sprite_half < 10'd6) sprite_half = 10'd6;
+        sprite_top = 10'd240 - sprite_half;
+        sprite_bottom = 10'd240 + sprite_half;
+        sprite_visible = (sprite_forward_s > 18'sd0) && (sprite_screen_x < 10'd640);
+        sprite_on = sprite_visible && (hc >= (sprite_screen_x - sprite_half)) && (hc <= (sprite_screen_x + sprite_half))
+                    && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
         if (dist_steps > 9'd180) shade = 4'd1; else if (dist_steps > 9'd120) shade = 4'd3;
         else if (dist_steps > 9'd80) shade = 4'd6; else if (dist_steps > 9'd40) shade = 4'd9; else shade = 4'd12;
         if (dist_steps > 9'd120) wall_lit = shade >> 3;
@@ -257,15 +309,17 @@ module vga_raycast_demo(
             vga_r = 4'd1; vga_g = 4'd2; vga_b = 4'd4 + {1'b0, vc[8:6]};
         end else if (vc > wall_bottom) begin
             vga_r = 4'd1; vga_g = 4'd1 + {2'b00, vc[8:7]}; vga_b = 4'd1;
+        end else if (sprite_on) begin
+            vga_r = 4'd1; vga_g = 4'd12; vga_b = 4'd15;
         end else if (hit) begin
             if (hit_tile_x[0] ^ hit_tile_y[0] ^ side ^ vc[3]) begin
-                vga_r = side ? (wall_lit >> 1) : wall_lit;
-                vga_g = wall_lit >> 2;
-                vga_b = 4'd0;
+                vga_r = side ? (wall_r >> 1) : wall_r;
+                vga_g = wall_g;
+                vga_b = wall_b;
             end else begin
-                vga_r = 4'd0;
-                vga_g = side ? (wall_lit >> 1) : wall_lit;
-                vga_b = wall_lit >> 2;
+                vga_r = wall_r >> 2;
+                vga_g = side ? (wall_g >> 1) : wall_g;
+                vga_b = wall_b >> 2;
             end
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
