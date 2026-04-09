@@ -186,6 +186,9 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
+        localparam BRICK_W = 24;
+        localparam BRICK_H = 24;
+        localparam MORTAR_W = 2;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
     reg signed [17:0] sprite_forward_s, sprite_cross_s;
@@ -252,26 +255,26 @@ module vga_raycast_demo(
         input [1:0] tex_id;
         input [8:0] u;
         input [8:0] v;
-        reg [8:0] u2;
+        integer u_mod;
+        integer v_mod;
+        integer brick_x;
+        integer brick_y;
+        integer row_off;
         reg mortar;
-        reg edge_flag;
-        reg band;
-        reg [3:0] noise;
         reg [3:0] idx;
         begin
-            u2 = u + (v[8] ? 9'd28 : 9'd0);
-            mortar = (u2[5:0] == 6'b000000) || (v[5:0] == 6'b000000);
-            edge_flag = (u2[5:0] == 6'b111111) || (v[5:0] == 6'b111111);
-            band = (u2[6] ^ v[6]);
-            noise = {u[2] ^ v[3], u[4] ^ v[1], u[1] ^ v[5], u[0] ^ v[2]};
+            brick_y = v / BRICK_H;
+            row_off = (brick_y[0] != 0) ? (BRICK_W / 2) : 0;
+            u_mod = (u + row_off) % BRICK_W;
+            v_mod = v % BRICK_H;
+            brick_x = (u + row_off) / BRICK_W;
+            mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
             idx = 4'd9;
 
             case (tex_id)
                 default: begin
                     if (mortar) idx = 4'd3;
-                    else if (edge_flag) idx = 4'd6;
-                    else if (band) idx = 4'd9;
-                    else idx = 4'd10 + {2'b00, noise[1:0]};
+                    else idx = 4'd8 + {2'b00, (brick_x[0] ^ brick_y[0])};
                 end
             endcase
             tex_index = idx;
@@ -286,11 +289,10 @@ module vga_raycast_demo(
             g = 4'd6;
             case (idx)
                 4'd2: g = 4'd4;
-                4'd6: g = 4'd7;
-                4'd8: g = 4'd9;
+                4'd3: g = 4'd5;
+                4'd8: g = 4'd8;
                 4'd9: g = 4'd10;
-                4'd11: g = 4'd12;
-                default: g = 4'd8;
+                default: g = 4'd7;
             endcase
             tex_palette = {g, g, g};
         end
@@ -402,7 +404,11 @@ module vga_raycast_demo(
         end else if (vc < wall_top) begin
             vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
         end else if (vc > wall_bottom) begin
-            vga_r = 4'd6 + {2'b00, vc[8:7]}; vga_g = 4'd2; vga_b = 4'd1;
+            if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[3] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
+                vga_r = 4'd1; vga_g = 4'd7; vga_b = 4'd1;
+            end else begin
+                vga_r = 4'd1; vga_g = 4'd5 + {2'b00, vc[8:7]}; vga_b = 4'd1;
+            end
         end else if (sprite_on) begin
             vga_r = 4'd8; vga_g = 4'd8; vga_b = 4'd8;
         end else if (hit) begin
