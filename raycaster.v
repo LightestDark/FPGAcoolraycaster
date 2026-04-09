@@ -202,6 +202,20 @@ module vga_raycast_demo(
     reg [23:0] moon_dist, moon_dist2;
     reg moon_on;
     reg star_on;
+    reg star_on2;
+    reg dust_on;
+    reg moon_rim;
+    reg meteor_on;
+    reg flash_on;
+    reg signed [10:0] meteor_dx;
+    reg [9:0] meteor_x;
+    reg [9:0] meteor_y;
+    reg [10:0] sky_x1;
+    reg [10:0] sky_x2;
+    reg [3:0] water_g;
+    reg [3:0] water_b;
+    reg [3:0] wall_r_base;
+    reg [15:0] lfsr;
     reg [9:0] sprite_top, sprite_bottom;
     reg [8:0] sprite_dist_steps;
     reg sprite_visible;
@@ -351,8 +365,10 @@ module vga_raycast_demo(
             player_y <= 16'd896;
             cam_angle <= 8'd0;
             demo_tick <= 16'd0;
+            lfsr <= 16'h1d2b;
         end else if (hc == 10'd799 && vc == 10'd524) begin
             demo_tick <= demo_tick + 16'd1;
+            lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ 1'b1};
             if (ctrl_left)  cam_angle <= cam_angle - 8'd2;
             if (ctrl_right) cam_angle <= cam_angle + 8'd2;
 
@@ -425,10 +441,33 @@ module vga_raycast_demo(
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
-        wall_r = tex_r + (wall_lit >> 2);
-        if (wall_r < 4'd4) wall_r = 4'd4;
+        wall_r_base = tex_r + (wall_lit >> 2);
+        if (wall_r_base < 4'd4) wall_r_base = 4'd4;
+        if (tex_idx[0] ^ side) begin
+            wall_r = wall_r_base + 4'd1;
+        end else begin
+            wall_r = wall_r_base - 4'd1;
+        end
+        if (wall_r > 4'd15) wall_r = 4'd15;
+        if (wall_r < 4'd2) wall_r = 4'd2;
         wall_g = wall_r;
         wall_b = wall_r;
+        if (dist_steps > 9'd180) begin
+            wall_r = (wall_r + 4'd8) >> 1;
+            wall_g = wall_r;
+            wall_b = wall_r;
+        end
+        if (hit_tile_x[2] ^ hit_tile_y[2]) begin
+            wall_r = wall_r - (wall_r >> 3);
+            wall_g = wall_r;
+            wall_b = wall_r;
+        end
+        if (hc[4] ^ demo_tick[5]) begin
+            wall_r = wall_r + 4'd1;
+            if (wall_r > 4'd15) wall_r = 4'd15;
+            wall_g = wall_r;
+            wall_b = wall_r;
+        end
         moon_dx = $signed({1'b0, hc}) - 12'sd520;
         moon_dy = $signed({1'b0, vc}) - 12'sd110;
         moon_dx2 = moon_dx + 12'sd8;
@@ -436,26 +475,47 @@ module vga_raycast_demo(
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
         moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-          star_on = (((hc * 10'd131 + vc * 10'd73 + (hc ^ vc) * 10'd17) & 10'h3ff) < 10'd2) &&
-                (vc < 10'd140);
+        moon_rim = (moon_dist <= 24'd1024) && !moon_on;
+        sky_x1 = {1'b0, hc} + {2'b0, cam_angle} + {4'b0000, demo_tick[6:0]};
+        sky_x2 = {1'b0, hc} + {3'b000, cam_angle[7:1]} + {5'b00000, demo_tick[5:0]};
+        star_on = (((sky_x1[7:0] * 8'd37 + vc[7:0] * 8'd53 + 8'd19) & 8'hff) < 8'd3) &&
+                  (vc < 10'd140);
+        star_on2 = (((sky_x2[7:0] * 8'd23 + vc[7:0] * 8'd41 + 8'd7) & 8'hff) < 8'd2) &&
+                   (vc < 10'd140);
+        dust_on = (((hc[7:0] + demo_tick[7:0]) ^ (vc[7:0] + demo_tick[5:0])) & 8'h3f) == 8'h00;
+        meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
+        meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
+        meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
+        meteor_on = (lfsr[3:0] == 4'b0000) && (demo_tick[6:0] < 7'd40) &&
+                    ((meteor_dx == $signed({1'b0, vc}) - $signed({1'b0, meteor_y}))) &&
+                    (meteor_dx > -11'sd24) && (meteor_dx < 11'sd24);
+        flash_on = (lfsr[7:0] == 8'h5a) && (demo_tick[2:0] == 3'b000);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
-            if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
-                vga_r = 4'd12; vga_g = 4'd12; vga_b = 4'd12;
-            end else if (star_on && (vc < 10'd140)) begin
+            if (meteor_on) begin
                 vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+            end else if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
+                vga_r = 4'd12; vga_g = 4'd12; vga_b = 4'd12;
+            end else if (moon_rim && (hc < 10'd620) && (vc < 10'd160)) begin
+                vga_r = 4'd9; vga_g = 4'd9; vga_b = 4'd9;
+            end else if ((star_on || star_on2) && (vc < 10'd140)) begin
+                vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+            end else if (dust_on && (vc < 10'd180)) begin
+                vga_r = 4'd9; vga_g = 4'd9; vga_b = 4'd9;
             end else begin
                 vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
             end
         end else if (vc > wall_bottom) begin
+            water_g = 4'd3 + {2'b00, vc[8:7]};
+            water_b = 4'd2 + {2'b00, vc[7:6]};
             if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
-                vga_r = 4'd1; vga_g = 4'd7; vga_b = 4'd1;
+                vga_r = 4'd0; vga_g = water_g + 4'd1; vga_b = water_b;
             end else if ((hc[4] ^ vc[5]) && (hc[2:0] == 3'd0)) begin
-                vga_r = 4'd1; vga_g = 4'd6; vga_b = 4'd1;
+                vga_r = 4'd0; vga_g = water_g; vga_b = water_b + 4'd1;
             end else begin
-                vga_r = 4'd1; vga_g = 4'd4 + {2'b00, vc[8:7]}; vga_b = 4'd1;
+                vga_r = 4'd0; vga_g = water_g; vga_b = water_b;
             end
         end else if (sprite_on) begin
             if (hc <= (sprite_left + 10'd1) || hc >= (sprite_right - 10'd1) ||
@@ -470,6 +530,14 @@ module vga_raycast_demo(
             vga_b = vga_r;
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
+        end
+        if (flash_on) begin
+            vga_r = vga_r + 4'd2;
+            vga_g = vga_g + 4'd2;
+            vga_b = vga_b + 4'd2;
+            if (vga_r > 4'd15) vga_r = 4'd15;
+            if (vga_g > 4'd15) vga_g = 4'd15;
+            if (vga_b > 4'd15) vga_b = 4'd15;
         end
     end
 endmodule
