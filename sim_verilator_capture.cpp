@@ -96,10 +96,12 @@ int main(int argc, char **argv)
     SDL_Texture *texture = nullptr;
     std::vector<unsigned char> frame_buf(static_cast<size_t>(cap_w) * cap_h * 3);
     int frame_count = 0;
+    bool frame_started = false;
     int key_hold = 0;
     int key_code = -1;
     int pixel_index = 0;
     bool quit = false;
+    bool quit_request = false;
 
     std::printf("Controls: W/S forward/back, A/D turn, Q/E strafe, ESC to stop\n");
     std::printf("Capture: %d frames @ %d fps, sample_shift=%d, sample_shift_y=%d (%dx%d)\n",
@@ -134,6 +136,15 @@ int main(int argc, char **argv)
         top.eval();
 
         if (top.hc == 0 && top.vc == 0) {
+            if (frame_started) {
+                frame_count++;
+                if (frame_count >= frames) {
+                    quit_request = true;
+                }
+            }
+            if (quit_request && frame_count > 0) {
+                break;
+            }
             if (frame_count == 0) {
                 pipe = open_ffmpeg_pipe(cap_w, cap_h, fps, "raycast.mp4");
                 if (!pipe) {
@@ -143,6 +154,7 @@ int main(int argc, char **argv)
                 }
             }
             pixel_index = 0;
+            frame_started = true;
         }
 
         if (renderer) {
@@ -150,6 +162,7 @@ int main(int argc, char **argv)
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_QUIT) {
                     quit = true;
+                    quit_request = true;
                     break;
                 }
             }
@@ -166,7 +179,8 @@ int main(int argc, char **argv)
                 key = next_key;
             }
             if (key == 27) {
-                break;
+                quit_request = true;
+                key = -1;
             }
             if (key >= 'A' && key <= 'Z') {
                 key = key - 'A' + 'a';
@@ -213,8 +227,8 @@ int main(int argc, char **argv)
         }
 
         if (top.hc == 0 && top.vc == 0) {
-            if (frame_count < frames) {
-                frame_count++;
+            if (quit_request) {
+                quit = true;
             }
         }
 

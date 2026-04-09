@@ -159,7 +159,8 @@ module vga_raycast_demo(
     wire signed [15:0] sin_out, cos_out;
     wire signed [15:0] move_sin, move_cos;
     reg [9:0] wall_half, wall_top, wall_bottom;
-    reg [3:0] shade, wall_lit;
+    reg [3:0] shade;
+    wire [3:0] wall_lit;
     reg signed [8:0] sweep;
     reg signed [8:0] sweep_shift;
     reg signed [8:0] ray_angle_sum;
@@ -222,6 +223,9 @@ module vga_raycast_demo(
     ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .dist_steps(dist_steps), .side(side));
 
     assign manual_active = manual_enable;
+    assign wall_lit = (dist_steps > 9'd120) ? (shade >> 3) :
+                      (dist_steps > 9'd90)  ? (shade >> 2) :
+                      (dist_steps > 9'd60)  ? (shade >> 1) : shade;
     assign ctrl_fwd = manual_active ? move_fwd : ~demo_tick[6];
     assign ctrl_back = manual_active ? move_back : 1'b0;
     assign ctrl_left = manual_active ? turn_left : 1'b0;
@@ -282,12 +286,12 @@ module vga_raycast_demo(
         sprite_dy = $signed({2'b0, 16'd1152}) - $signed({2'b0, player_y});
         sprite_forward = sprite_dx * $signed(move_cos) + sprite_dy * $signed(move_sin);
         sprite_cross = sprite_dx * $signed(move_sin) - sprite_dy * $signed(move_cos);
-        sprite_forward_s = sprite_forward >>> 14;
-        sprite_cross_s = sprite_cross >>> 14;
+        sprite_forward_s = $signed(sprite_forward[31:14]);
+        sprite_cross_s = $signed(sprite_cross[31:14]);
         sprite_dist_steps = (sprite_forward_s[17:0] > 0) ? sprite_forward_s[17:9] : 9'd0;
         sprite_off = sprite_cross_s[15:0];
         sprite_screen_x = 10'd320 + sprite_off[9:0];
-        sprite_half = (sprite_forward_s > 18'sd0) ? (10'd80 - sprite_forward_s[17:11]) : 10'd0;
+        sprite_half = (sprite_forward_s > 18'sd0) ? (10'd80 - {3'b000, sprite_forward_s[17:11]}) : 10'd0;
         if (sprite_half < 10'd6) sprite_half = 10'd6;
         sprite_top = 10'd240 - sprite_half;
         sprite_bottom = 10'd240 + sprite_half;
@@ -296,10 +300,6 @@ module vga_raycast_demo(
                     && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
         if (dist_steps > 9'd180) shade = 4'd1; else if (dist_steps > 9'd120) shade = 4'd3;
         else if (dist_steps > 9'd80) shade = 4'd6; else if (dist_steps > 9'd40) shade = 4'd9; else shade = 4'd12;
-        if (dist_steps > 9'd120) wall_lit = shade >> 3;
-        else if (dist_steps > 9'd90) wall_lit = shade >> 2;
-        else if (dist_steps > 9'd60) wall_lit = shade >> 1;
-        else wall_lit = shade;
         wall_half = (10'd180 / (dist_steps + 1)) + 10'd6;
         wall_top = 10'd240 - wall_half;
         wall_bottom = 10'd240 + wall_half;
