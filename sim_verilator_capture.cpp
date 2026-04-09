@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     int frames = env_frames ? std::atoi(env_frames) : 900;
     int fps = env_fps ? std::atoi(env_fps) : 60;
     int sample_shift = env_shift ? std::atoi(env_shift) : 0; // 0=640x480, 1=320x240, 2=160x120
-    int sample_shift_y = env_shift_y ? std::atoi(env_shift_y) : sample_shift;
+    int sample_shift_y = env_shift_y ? std::atoi(env_shift_y) : 1;
 
     if (frames <= 0) frames = 600;
     if (fps <= 0) fps = 60;
