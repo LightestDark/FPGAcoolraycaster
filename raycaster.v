@@ -196,6 +196,11 @@ module vga_raycast_demo(
     reg [9:0] sprite_screen_x;
     reg [9:0] sprite_half;
     reg [9:0] sprite_left, sprite_right;
+    reg signed [11:0] moon_dx, moon_dy;
+    reg signed [11:0] moon_dx2, moon_dy2;
+    reg [23:0] moon_dist, moon_dist2;
+    reg moon_on;
+    reg star_on;
     reg [9:0] sprite_top, sprite_bottom;
     reg [8:0] sprite_dist_steps;
     reg sprite_visible;
@@ -419,13 +424,31 @@ module vga_raycast_demo(
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
         wall_r = tex_r + (wall_lit >> 2);
-        if (wall_r < 4'd5) wall_r = 4'd5;
+        if (wall_r < 4'd4) wall_r = 4'd4;
         wall_g = wall_r;
         wall_b = wall_r;
+        moon_dx = $signed({1'b0, hc}) - 12'sd560;
+        moon_dy = $signed({1'b0, vc}) - 12'sd80;
+        moon_dx2 = moon_dx + 12'sd8;
+        moon_dy2 = moon_dy;
+        moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
+        moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
+        moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
+        star_on = ((hc[4:0] == 5'd3) && (vc[5:0] == 6'd11)) ||
+                  ((hc[5:0] == 6'd27) && (vc[6:1] == 6'd9)) ||
+                  ((hc[5:1] == 5'd21) && (vc[5:0] == 6'd37)) ||
+                  ((hc[6:2] == 5'd12) && (vc[7:2] == 6'd9));
+
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
-            vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
+            if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
+                vga_r = 4'd12; vga_g = 4'd12; vga_b = 4'd12;
+            end else if (star_on && (vc < 10'd140)) begin
+                vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+            end else begin
+                vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
+            end
         end else if (vc > wall_bottom) begin
             if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
                 vga_r = 4'd1; vga_g = 4'd7; vga_b = 4'd1;
