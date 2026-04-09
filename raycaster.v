@@ -205,6 +205,7 @@ module vga_raycast_demo(
     reg moon_crescent;
     reg star_on;
     reg star_on2;
+    reg star_twinkle;
     reg dust_on;
     reg moon_rim;
     reg meteor_on;
@@ -486,10 +487,11 @@ module vga_raycast_demo(
         moon_rim = moon_disk && (moon_dist > 24'd784);
         sky_x1 = {1'b0, hc} + {2'b0, cam_angle} + {4'b0000, demo_tick[6:0]};
         sky_x2 = {1'b0, hc} + {3'b000, cam_angle[7:1]} + {5'b00000, demo_tick[5:0]};
-        star_on = (((sky_x1[7:0] * 8'd197 + vc[7:0] * 8'd73 + (sky_x1[7:0] ^ vc[7:0])) & 8'hff) < 8'd6) &&
+        star_on = (((sky_x1[7:0] * 8'd197 + vc[7:0] * 8'd73 + (sky_x1[7:0] ^ vc[7:0])) & 8'hff) < 8'd4) &&
               (vc < 10'd140);
         star_on2 = 1'b0;
         dust_on = 1'b0;
+        star_twinkle = star_on && (demo_tick[3] ^ hc[2]);
         meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
         meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
         meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
@@ -508,7 +510,11 @@ module vga_raycast_demo(
                     vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
                 end
             end else if ((star_on || star_on2) && (vc < 10'd140)) begin
-                vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+                if (star_twinkle) begin
+                    vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
+                end else begin
+                    vga_r = 4'd11; vga_g = 4'd11; vga_b = 4'd11;
+                end
             end else if (dust_on && (vc < 10'd180)) begin
                 vga_r = 4'd9; vga_g = 4'd9; vga_b = 4'd9;
             end else begin
@@ -517,7 +523,8 @@ module vga_raycast_demo(
         end else if (vc > wall_bottom) begin
             water_g = 4'd3 + {2'b00, vc[8:7]} + {2'b00, cam_angle[7:6]};
             water_b = 4'd2 + {2'b00, vc[7:6]};
-            if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
+            if (((hc[2:0] == demo_tick[2:0]) && (vc[2:0] == demo_tick[5:3])) ||
+                ((hc[4] ^ vc[3]) && (hc[1:0] == demo_tick[1:0]))) begin
                 vga_r = 4'd0; vga_g = water_g + 4'd1; vga_b = water_b;
             end else if ((hc[4] ^ vc[5]) && (hc[2:0] == 3'd0)) begin
                 vga_r = 4'd0; vga_g = water_g; vga_b = water_b + 4'd1;
