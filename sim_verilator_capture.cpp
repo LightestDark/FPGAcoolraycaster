@@ -55,9 +55,19 @@ int main(int argc, char **argv)
 {
     Verilated::commandArgs(argc, argv);
 
-    const int frames = 600;
-    const int fps = 60;
-    const int sample_shift = 1; // 0=640x480, 1=320x240, 2=160x120
+    const char *env_frames = std::getenv("CAP_FRAMES");
+    const char *env_fps = std::getenv("CAP_FPS");
+    const char *env_shift = std::getenv("CAP_SAMPLE_SHIFT");
+
+    int frames = env_frames ? std::atoi(env_frames) : 600;
+    int fps = env_fps ? std::atoi(env_fps) : 60;
+    int sample_shift = env_shift ? std::atoi(env_shift) : 1; // 0=640x480, 1=320x240, 2=160x120
+
+    if (frames <= 0) frames = 600;
+    if (fps <= 0) fps = 60;
+    if (sample_shift < 0) sample_shift = 0;
+    if (sample_shift > 3) sample_shift = 3;
+
     const int cap_w = 640 >> sample_shift;
     const int cap_h = 480 >> sample_shift;
 
@@ -88,6 +98,7 @@ int main(int argc, char **argv)
     bool quit = false;
 
     std::printf("Controls: W/S forward/back, A/D turn, Q/E strafe, ESC to stop\n");
+    std::printf("Capture: %d frames @ %d fps, sample_shift=%d (%dx%d)\n", frames, fps, sample_shift, cap_w, cap_h);
 
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
         window = SDL_CreateWindow("raycaster live",
