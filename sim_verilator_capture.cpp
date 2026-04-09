@@ -148,6 +148,23 @@ int main(int argc, char **argv)
 
         if (top.hc == 0 && top.vc == 0) {
             if (frame_started) {
+                const int frame_bytes = cap_w * cap_h * 3;
+                if (pixel_index < frame_bytes) {
+                    int remaining = frame_bytes - pixel_index;
+                    unsigned char zero_buf[4096];
+                    std::memset(zero_buf, 0, sizeof(zero_buf));
+                    while (remaining > 0) {
+                        int chunk = remaining > static_cast<int>(sizeof(zero_buf)) ? static_cast<int>(sizeof(zero_buf)) : remaining;
+                        if (pipe) {
+                            std::fwrite(zero_buf, 1, static_cast<size_t>(chunk), pipe);
+                        }
+                        if (pixel_index + chunk <= frame_bytes) {
+                            std::memset(frame_buf.data() + pixel_index, 0, static_cast<size_t>(chunk));
+                        }
+                        pixel_index += chunk;
+                        remaining -= chunk;
+                    }
+                }
                 frame_count++;
                 if (frame_count >= frames) {
                     quit_request = true;
@@ -250,6 +267,26 @@ int main(int argc, char **argv)
         top.clk_25 = 0;
         top.eval();
         sim_time++;
+    }
+
+    if (frame_started) {
+        const int frame_bytes = cap_w * cap_h * 3;
+        if (pixel_index < frame_bytes) {
+            int remaining = frame_bytes - pixel_index;
+            unsigned char zero_buf[4096];
+            std::memset(zero_buf, 0, sizeof(zero_buf));
+            while (remaining > 0) {
+                int chunk = remaining > static_cast<int>(sizeof(zero_buf)) ? static_cast<int>(sizeof(zero_buf)) : remaining;
+                if (pipe) {
+                    std::fwrite(zero_buf, 1, static_cast<size_t>(chunk), pipe);
+                }
+                if (pixel_index + chunk <= frame_bytes) {
+                    std::memset(frame_buf.data() + pixel_index, 0, static_cast<size_t>(chunk));
+                }
+                pixel_index += chunk;
+                remaining -= chunk;
+            }
+        }
     }
 
     if (pipe) {

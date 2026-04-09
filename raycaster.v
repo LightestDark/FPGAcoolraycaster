@@ -55,9 +55,11 @@ module map_rom(
         begin
             if (x == 0 || y == 0 || x == 31 || y == 31)
                 map_wall = 1'b1;
-            else if ((x[2:0] == 0 && y[2:0] != 0) || (y[2:0] == 0 && x[2:0] != 0))
+            else if ((x >= 6 && x <= 25 && (y == 6 || y == 25)) || (y >= 6 && y <= 25 && (x == 6 || x == 25)))
                 map_wall = 1'b1;
-            else if ((x >= 10 && x <= 14 && y >= 10 && y <= 14) || (x >= 20 && x <= 24 && y >= 6 && y <= 10))
+            else if ((x >= 10 && x <= 21 && (y == 10 || y == 21)) || (y >= 10 && y <= 21 && (x == 10 || x == 21)))
+                map_wall = 1'b1;
+            else if ((x == 16 && y >= 6 && y <= 25) || (y == 16 && x >= 6 && x <= 25))
                 map_wall = 1'b1;
             else
                 map_wall = 1'b0;
@@ -88,9 +90,11 @@ module ray_dda(
         begin
             if (x == 0 || y == 0 || x == 31 || y == 31)
                 is_wall = 1'b1;
-            else if ((x[2:0] == 0 && y[2:0] != 0) || (y[2:0] == 0 && x[2:0] != 0))
+            else if ((x >= 6 && x <= 25 && (y == 6 || y == 25)) || (y >= 6 && y <= 25 && (x == 6 || x == 25)))
                 is_wall = 1'b1;
-            else if ((x >= 10 && x <= 14 && y >= 10 && y <= 14) || (x >= 20 && x <= 24 && y >= 6 && y <= 10))
+            else if ((x >= 10 && x <= 21 && (y == 10 || y == 21)) || (y >= 10 && y <= 21 && (x == 10 || x == 21)))
+                is_wall = 1'b1;
+            else if ((x == 16 && y >= 6 && y <= 25) || (y == 16 && x >= 6 && x <= 25))
                 is_wall = 1'b1;
             else
                 is_wall = 1'b0;
@@ -174,9 +178,12 @@ module vga_raycast_demo(
     reg [15:0] demo_tick;
     reg signed [15:0] move_dx, move_dy;
     reg [1:0] wall_type;
+    reg [1:0] wall_tex_id;
     reg [3:0] wall_r, wall_g, wall_b;
-    reg [3:0] tex_u, tex_v;
+    reg [6:0] tex_u, tex_v;
     reg [9:0] wall_h;
+    reg [9:0] tex_v_full;
+    reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
     reg signed [17:0] sprite_dx, sprite_dy;
@@ -202,12 +209,31 @@ module vga_raycast_demo(
             ty = pos_y[12:8];
             if (tx == 0 || ty == 0 || tx == 31 || ty == 31)
                 wall_at = 1'b1;
-            else if ((tx[2:0] == 0 && ty[2:0] != 0) || (ty[2:0] == 0 && tx[2:0] != 0))
+            else if ((tx >= 6 && tx <= 25 && (ty == 6 || ty == 25)) || (ty >= 6 && ty <= 25 && (tx == 6 || tx == 25)))
                 wall_at = 1'b1;
-            else if ((tx >= 10 && tx <= 14 && ty >= 10 && ty <= 14) || (tx >= 20 && tx <= 24 && ty >= 6 && ty <= 10))
+            else if ((tx >= 10 && tx <= 21 && (ty == 10 || ty == 21)) || (ty >= 10 && ty <= 21 && (tx == 10 || tx == 21)))
+                wall_at = 1'b1;
+            else if ((tx == 16 && ty >= 6 && ty <= 25) || (ty == 16 && tx >= 6 && tx <= 25))
                 wall_at = 1'b1;
             else
                 wall_at = 1'b0;
+        end
+    endfunction
+
+    function automatic is_wall_tile;
+        input [4:0] x;
+        input [4:0] y;
+        begin
+            if (x == 0 || y == 0 || x == 31 || y == 31)
+                is_wall_tile = 1'b1;
+            else if ((x >= 6 && x <= 25 && (y == 6 || y == 25)) || (y >= 6 && y <= 25 && (x == 6 || x == 25)))
+                is_wall_tile = 1'b1;
+            else if ((x >= 10 && x <= 21 && (y == 10 || y == 21)) || (y >= 10 && y <= 21 && (x == 10 || x == 21)))
+                is_wall_tile = 1'b1;
+            else if ((x == 16 && y >= 6 && y <= 25) || (y == 16 && x >= 6 && x <= 25))
+                is_wall_tile = 1'b1;
+            else
+                is_wall_tile = 1'b0;
         end
     endfunction
 
@@ -215,32 +241,56 @@ module vga_raycast_demo(
         input [4:0] tx;
         input [4:0] ty;
         begin
-            if (tx == 0 || ty == 0 || tx == 31 || ty == 31)
-                wall_type_at = 2'd1; // border
-            else if ((tx[2:0] == 0 && ty[2:0] != 0) || (ty[2:0] == 0 && tx[2:0] != 0))
-                wall_type_at = 2'd2; // grid lines
-            else if ((tx >= 10 && tx <= 14 && ty >= 10 && ty <= 14) || (tx >= 20 && tx <= 24 && ty >= 6 && ty <= 10))
-                wall_type_at = 2'd3; // inner rooms
+            if (is_wall_tile(tx, ty))
+                wall_type_at = 2'd2; // single brick texture
             else
                 wall_type_at = 2'd0;
         end
     endfunction
 
-    function automatic [11:0] tex_sample;
+    function automatic [3:0] tex_index;
         input [1:0] tex_id;
-        input [3:0] u;
-        input [3:0] v;
+        input [6:0] u;
+        input [6:0] v;
+        reg [6:0] u2;
         reg mortar;
-        reg stripe;
+        reg edge_flag;
+        reg band;
+        reg [3:0] idx;
         begin
-            mortar = (u[1:0] == 2'b00) || (v[1:0] == 2'b00);
-            stripe = (u[2] ^ v[1]);
+            u2 = u + (v[6] ? 7'd12 : 7'd0);
+            mortar = (u2[4:0] == 5'b00000) || (v[4:0] == 5'b00000);
+            edge_flag = (u2[4:0] == 5'b11111) || (v[4:0] == 5'b11111);
+            band = (u2[5] ^ v[5]);
+            idx = 4'd8;
+
             case (tex_id)
-                2'd1: tex_sample = mortar ? 12'h300 : (stripe ? 12'hb54 : 12'h954);
-                2'd2: tex_sample = mortar ? 12'h310 : (stripe ? 12'hc64 : 12'ha53);
-                2'd3: tex_sample = mortar ? 12'h210 : (stripe ? 12'h944 : 12'h733);
-                default: tex_sample = mortar ? 12'h320 : (stripe ? 12'hb63 : 12'h853);
+                default: begin
+                    if (mortar) idx = 4'd2;
+                    else if (edge_flag) idx = 4'd6;
+                    else if (band) idx = 4'd9;
+                    else idx = 4'd11;
+                end
             endcase
+            tex_index = idx;
+        end
+    endfunction
+
+    function automatic [11:0] tex_palette;
+        input [1:0] tex_id;
+        input [3:0] idx;
+        reg [3:0] g;
+        begin
+            g = 4'd6;
+            case (idx)
+                4'd2: g = 4'd4;
+                4'd6: g = 4'd7;
+                4'd8: g = 4'd9;
+                4'd9: g = 4'd10;
+                4'd11: g = 4'd12;
+                default: g = 4'd8;
+            endcase
+            tex_palette = {g, g, g};
         end
     endfunction
 
@@ -301,20 +351,6 @@ module vga_raycast_demo(
         ray_angle_sum = $signed({1'b0, cam_angle}) + sweep_shift;
         ray_angle = ray_angle_sum[7:0];
 
-            wall_type = wall_type_at(hit_tile_x, hit_tile_y);
-            tex_u = side ? hit_y_fp[7:4] : hit_x_fp[7:4];
-            wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
-            if (vc < wall_top) tex_v = 4'd0;
-            else if (vc > wall_bottom) tex_v = 4'd15;
-            else tex_v = ((vc - wall_top) * 16) / wall_h;
-            tex_color = tex_sample(wall_type, tex_u, tex_v);
-            tex_r = tex_color[11:8];
-            tex_g = tex_color[7:4];
-            tex_b = tex_color[3:0];
-            wall_r = (tex_r * (wall_lit + 1)) >> 4;
-            wall_g = (tex_g * (wall_lit + 1)) >> 4;
-            wall_b = (tex_b * (wall_lit + 1)) >> 4;
-
         sprite_dx = $signed({2'b0, 16'd1408}) - $signed({2'b0, player_x});
         sprite_dy = $signed({2'b0, 16'd1152}) - $signed({2'b0, player_y});
         sprite_forward = sprite_dx * $signed(move_cos) + sprite_dy * $signed(move_sin);
@@ -338,27 +374,39 @@ module vga_raycast_demo(
         else if (dist_steps > 9'd60) shade = 4'd9;
         else if (dist_steps > 9'd40) shade = 4'd11;
         else shade = 4'd13;
-        wall_half = (10'd260 / (dist_steps + 1)) + 10'd10;
+        wall_half = (10'd320 / (dist_steps + 1)) + 10'd20;
         wall_top = 10'd240 - wall_half;
         wall_bottom = 10'd240 + wall_half;
+
+        wall_type = wall_type_at(hit_tile_x, hit_tile_y);
+        wall_tex_id = 2'd0;
+        tex_u = side ? hit_y_fp[7:1] : hit_x_fp[7:1];
+        wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
+        if (vc < wall_top) tex_v = 7'd0;
+        else if (vc > wall_bottom) tex_v = 7'd127;
+        else begin
+            tex_v_full = ((vc - wall_top) * 128) / wall_h;
+            tex_v = tex_v_full[6:0];
+        end
+        tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
+        tex_color = tex_palette(wall_tex_id, tex_idx);
+        tex_r = tex_color[11:8];
+        wall_r = tex_r + (wall_lit >> 2);
+        if (wall_r < 4'd5) wall_r = 4'd5;
+        wall_g = wall_r;
+        wall_b = wall_r;
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
-            vga_r = 4'd1; vga_g = 4'd2; vga_b = 4'd4 + {1'b0, vc[8:6]};
+            vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
         end else if (vc > wall_bottom) begin
-            vga_r = 4'd1; vga_g = 4'd1 + {2'b00, vc[8:7]}; vga_b = 4'd1;
+            vga_r = 4'd5 + {2'b00, vc[8:7]}; vga_g = 4'd2; vga_b = 4'd1;
         end else if (sprite_on) begin
-            vga_r = 4'd1; vga_g = 4'd12; vga_b = 4'd15;
+            vga_r = 4'd8; vga_g = 4'd8; vga_b = 4'd8;
         end else if (hit) begin
-            if (hit_tile_x[1] ^ hit_tile_y[1] ^ side ^ vc[4]) begin
-                vga_r = side ? (wall_r >> 1) : wall_r;
-                vga_g = wall_g;
-                vga_b = wall_b;
-            end else begin
-                vga_r = wall_r >> 2;
-                vga_g = side ? (wall_g >> 1) : wall_g;
-                vga_b = wall_b >> 2;
-            end
+            vga_r = side ? (wall_r - (wall_r >> 2)) : wall_r;
+            vga_g = vga_r;
+            vga_b = vga_r;
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
         end
