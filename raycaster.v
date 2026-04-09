@@ -186,9 +186,9 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-        localparam BRICK_W = 24;
-        localparam BRICK_H = 24;
-        localparam MORTAR_W = 2;
+        localparam BRICK_W = 32;
+        localparam BRICK_H = 20;
+        localparam MORTAR_W = 3;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
     reg signed [17:0] sprite_forward_s, sprite_cross_s;
@@ -268,6 +268,7 @@ module vga_raycast_demo(
         integer row_off;
         reg mortar;
         reg bevel;
+        reg inner;
         reg [3:0] idx;
         begin
             brick_y = {23'd0, v} / BRICK_H;
@@ -275,16 +276,18 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-                mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
-                bevel = ((u_mod >= MORTAR_W) && (u_mod <= (MORTAR_W + 1))) ||
-                    ((v_mod >= MORTAR_W) && (v_mod <= (MORTAR_W + 1)));
+                    mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
+                    bevel = ((u_mod >= MORTAR_W) && (u_mod <= (MORTAR_W + 1))) ||
+                        ((v_mod >= MORTAR_W) && (v_mod <= (MORTAR_W + 1)));
+                    inner = u_mod[3] ^ v_mod[2];
             idx = 4'd9;
 
             case (tex_id)
                 default: begin
                     if (mortar) idx = 4'd3;
                     else if (bevel) idx = 4'd6;
-                    else idx = 4'd8 + {2'b00, (brick_x[0] ^ brick_y[0])};
+                    else if (brick_x[0] ^ brick_y[0]) idx = 4'd9;
+                    else idx = 4'd10 + {3'b000, inner};
                 end
             endcase
             tex_index = idx;
@@ -321,8 +324,11 @@ module vga_raycast_demo(
             case (idx)
                 4'd2: g = 4'd4;
                 4'd3: g = 4'd5;
+                4'd6: g = 4'd6;
                 4'd8: g = 4'd8;
                 4'd9: g = 4'd10;
+                4'd10: g = 4'd11;
+                4'd11: g = 4'd12;
                 default: g = 4'd7;
             endcase
             tex_palette = {g, g, g};
@@ -427,17 +433,14 @@ module vga_raycast_demo(
         if (wall_r < 4'd4) wall_r = 4'd4;
         wall_g = wall_r;
         wall_b = wall_r;
-        moon_dx = $signed({1'b0, hc}) - 12'sd560;
-        moon_dy = $signed({1'b0, vc}) - 12'sd80;
+        moon_dx = $signed({1'b0, hc}) - 12'sd520;
+        moon_dy = $signed({1'b0, vc}) - 12'sd110;
         moon_dx2 = moon_dx + 12'sd8;
         moon_dy2 = moon_dy;
         moon_dist = moon_dx * moon_dx + moon_dy * moon_dy;
         moon_dist2 = moon_dx2 * moon_dx2 + moon_dy2 * moon_dy2;
         moon_on = (moon_dist <= 24'd900) && (moon_dist2 > 24'd784);
-        star_on = ((hc[4:0] == 5'd3) && (vc[5:0] == 6'd11)) ||
-                  ((hc[5:0] == 6'd27) && (vc[6:1] == 6'd9)) ||
-                  ((hc[5:1] == 5'd21) && (vc[5:0] == 6'd37)) ||
-                  ((hc[6:2] == 5'd12) && (vc[7:2] == 6'd9));
+        star_on = ((hc[4:0] ^ vc[5:1]) == 5'd0) && (hc[9:7] != 3'd0);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
