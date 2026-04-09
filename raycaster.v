@@ -218,6 +218,9 @@ module vga_raycast_demo(
     reg [3:0] water_b;
     reg [3:0] wall_r_base;
     reg [15:0] lfsr;
+    reg [3:0] sky_base;
+    reg [3:0] fog_strength;
+    reg edge_on;
     reg [9:0] sprite_top, sprite_bottom;
     reg [8:0] sprite_dist_steps;
     reg sprite_visible;
@@ -453,8 +456,11 @@ module vga_raycast_demo(
         if (wall_r < 4'd2) wall_r = 4'd2;
         wall_g = wall_r;
         wall_b = wall_r;
-        if (dist_steps > 9'd180) begin
-            wall_r = (wall_r + 4'd8) >> 1;
+        fog_strength = (dist_steps > 9'd200) ? 4'd6 :
+                       (dist_steps > 9'd160) ? 4'd4 :
+                       (dist_steps > 9'd120) ? 4'd2 : 4'd0;
+        if (fog_strength != 4'd0) begin
+            wall_r = (wall_r + fog_strength) >> 1;
             wall_g = wall_r;
             wall_b = wall_r;
         end
@@ -490,6 +496,9 @@ module vga_raycast_demo(
         meteor_on = 1'b0;
         flash_on = (lfsr[7:0] == 8'h5a) && (demo_tick[2:0] == 3'b000);
 
+        sky_base = 4'd2 + {1'b0, vc[8:6]};
+        edge_on = hit && (hc == 0 || hc == 10'd639 || vc == wall_top || vc == wall_bottom);
+
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
@@ -503,10 +512,10 @@ module vga_raycast_demo(
             end else if (dust_on && (vc < 10'd180)) begin
                 vga_r = 4'd9; vga_g = 4'd9; vga_b = 4'd9;
             end else begin
-                vga_r = 4'd2; vga_g = 4'd2; vga_b = 4'd3 + {1'b0, vc[8:6]};
+                vga_r = 4'd2; vga_g = 4'd2; vga_b = sky_base;
             end
         end else if (vc > wall_bottom) begin
-            water_g = 4'd3 + {2'b00, vc[8:7]};
+            water_g = 4'd3 + {2'b00, vc[8:7]} + {3'b000, cam_angle[7:6]};
             water_b = 4'd2 + {2'b00, vc[7:6]};
             if (((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0)) || ((hc[4] ^ vc[3]) && (hc[1:0] == 2'd0))) begin
                 vga_r = 4'd0; vga_g = water_g + 4'd1; vga_b = water_b;
@@ -526,6 +535,11 @@ module vga_raycast_demo(
             vga_r = side ? (wall_r - (wall_r >> 2)) : wall_r;
             vga_g = vga_r;
             vga_b = vga_r;
+            if (edge_on) begin
+                vga_r = vga_r - 4'd2;
+                vga_g = vga_r;
+                vga_b = vga_r;
+            end
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
         end
