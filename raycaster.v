@@ -530,7 +530,9 @@ module vga_raycast_demo(
             water_b = 4'd2 + {2'b00, vc[7:6]};
             if (((hc[2:0] == (demo_tick[2:0] ^ cam_angle[2:0])) && (vc[2:0] == demo_tick[5:3])) ||
                 ((hc[4] ^ vc[3] ^ demo_tick[4]) && (hc[1:0] == (demo_tick[1:0] ^ cam_angle[1:0]))) ||
-                ((hc[3:0] == demo_tick[3:0]) && (vc[3:0] == (demo_tick[7:4] ^ cam_angle[3:0])))) begin
+                ((hc[3:0] == demo_tick[3:0]) && (vc[3:0] == (demo_tick[7:4] ^ cam_angle[3:0]))) ||
+                ((hc[4:1] == demo_tick[5:2]) && (vc[4:1] == demo_tick[9:6])) ||
+                ((hc[2:0] == 3'd0) && (vc[2:0] == 3'd0))) begin
                 vga_r = 4'd0; vga_g = water_g + 4'd1; vga_b = water_b;
             end else if ((hc[4] ^ vc[5]) && (hc[2:0] == 3'd0)) begin
                 vga_r = 4'd0; vga_g = water_g; vga_b = water_b + 4'd1;
