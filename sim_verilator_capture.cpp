@@ -216,8 +216,8 @@ int main(int argc, char **argv)
             if (((top.hc & ((1 << sample_shift) - 1)) == 0) &&
                 ((top.vc & ((1 << sample_shift_y) - 1)) == 0)) {
                 if (top.vc < crop_top || top.vc >= (480 - crop_bottom)) {
-                    continue;
-                }
+                    // Skip cropped rows but keep the sim cycle intact.
+                } else {
                 unsigned char rgb[3];
                 rgb[0] = static_cast<unsigned char>(top.vga_r * 17);
                 rgb[1] = static_cast<unsigned char>(top.vga_g * 17);
@@ -236,6 +236,7 @@ int main(int argc, char **argv)
                     SDL_RenderClear(renderer);
                     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
                     SDL_RenderPresent(renderer);
+                }
                 }
             }
         }
