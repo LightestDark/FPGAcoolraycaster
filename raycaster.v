@@ -263,11 +263,11 @@ module vga_raycast_demo(
         reg mortar;
         reg [3:0] idx;
         begin
-            brick_y = v / BRICK_H;
+            brick_y = {23'd0, v} / BRICK_H;
             row_off = (brick_y[0] != 0) ? (BRICK_W / 2) : 0;
-            u_mod = (u + row_off) % BRICK_W;
-            v_mod = v % BRICK_H;
-            brick_x = (u + row_off) / BRICK_W;
+            u_mod = ({23'd0, u} + row_off) % BRICK_W;
+            v_mod = {23'd0, v} % BRICK_H;
+            brick_x = ({23'd0, u} + row_off) / BRICK_W;
             mortar = (u_mod < MORTAR_W) || (v_mod < MORTAR_W);
             idx = 4'd9;
 
