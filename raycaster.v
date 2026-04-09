@@ -484,20 +484,14 @@ module vga_raycast_demo(
         meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
         meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
         meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
-        meteor_on = (lfsr[3:0] == 4'b0000) && (demo_tick[6:0] < 7'd40) &&
-                    ((meteor_dx == $signed({1'b0, vc}) - $signed({1'b0, meteor_y}))) &&
-                    (meteor_dx > -11'sd24) && (meteor_dx < 11'sd24);
+        meteor_on = 1'b0;
         flash_on = (lfsr[7:0] == 8'h5a) && (demo_tick[2:0] == 3'b000);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
         end else if (vc < wall_top) begin
-            if (meteor_on) begin
-                vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
-            end else if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
+            if (moon_rim && (hc < 10'd620) && (vc < 10'd160)) begin
                 vga_r = 4'd12; vga_g = 4'd12; vga_b = 4'd12;
-            end else if (moon_rim && (hc < 10'd620) && (vc < 10'd160)) begin
-                vga_r = 4'd9; vga_g = 4'd9; vga_b = 4'd9;
             end else if ((star_on || star_on2) && (vc < 10'd140)) begin
                 vga_r = 4'd15; vga_g = 4'd15; vga_b = 4'd15;
             end else if (dust_on && (vc < 10'd180)) begin
