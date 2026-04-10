@@ -97,5 +97,5 @@ Controls (Verilator SDL capture):
 - **ESC**: exit
 
 ## Notes
-- `run_raycaster_demo.sh` and `run_raycaster_verilator.sh` use a hardcoded working directory (`/home/ak/verilog-project`). Update those paths to your local clone or run the commands manually as shown above.
+- `run_raycaster_demo.sh` and `run_raycaster_verilator.sh` use a hardcoded working directory. Update the `cd` path to your local clone or run the commands manually as shown above.
 - The demo’s top-level module is `vga_raycast_demo` in `raycaster.v`.
