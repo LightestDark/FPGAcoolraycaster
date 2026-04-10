@@ -96,6 +96,8 @@ Controls (Verilator SDL capture):
 - **Q/E**: strafe left/right
 - **ESC**: exit
 
+Note: The Icarus VPI demo and the Verilator SDL demo use different key mappings; follow the controls listed for the demo you run.
+
 ## Notes
 - `run_raycaster_demo.sh` and `run_raycaster_verilator.sh` use a hardcoded working directory. Update the `cd` path to your local clone or run the commands manually as shown above.
 - The demo’s top-level module is `vga_raycast_demo` in `raycaster.v`.
