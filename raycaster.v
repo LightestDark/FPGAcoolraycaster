@@ -168,6 +168,7 @@ module vga_raycast_demo(
     wire signed [15:0] sin_out, cos_out;
     wire signed [15:0] move_sin, move_cos;
     reg [9:0] wall_half, wall_top, wall_bottom;
+    reg [9:0] wall_height;
     reg signed [10:0] wall_top_s, wall_bottom_s;
     reg [9:0] wall_top_clamped, wall_bottom_clamped;
     reg [3:0] shade;
@@ -186,9 +187,9 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-    reg [23:0] tex_step;
+    reg [15:0] tex_step;
     reg [23:0] tex_pos;
-    reg [5:0] tex_u_6;
+    reg [4:0] tex_u_5;
     reg [4:0] tex_v_5;
     reg signed [17:0] hit_dx;
     reg signed [17:0] hit_dy;
@@ -461,9 +462,10 @@ module vga_raycast_demo(
         perp_steps = perp_dist[17:8];
         shade = shade_from_dist(perp_steps[8:0]);
         shade_banded = {shade[3:1], 1'b0};
-        wall_half = (perp_steps != 10'd0) ? (10'd280 / perp_steps) : 10'd240;
+        wall_height = (perp_steps != 10'd0) ? (10'd240 / perp_steps) : 10'd240;
+        if (wall_height > 10'd238) wall_height = 10'd238;
+        wall_half = {1'b0, wall_height[9:1]};
         if (wall_half < 10'd1) wall_half = 10'd1;
-        if (wall_half > 10'd240) wall_half = 10'd240;
         wall_top_s = 11'sd240 - $signed({1'b0, wall_half});
         wall_bottom_s = 11'sd240 + $signed({1'b0, wall_half});
         wall_top = wall_top_s[9:0];
@@ -477,52 +479,29 @@ module vga_raycast_demo(
 
         wall_tex_id = 2'd0;
         wall_u_frac = side ? hit_x_fp[7:0] : hit_y_fp[7:0];
-        tex_u_6 = wall_u_frac[7:2];
-        if ((side == 1'b0) && (cos_out > 0)) tex_u_6 = 6'd63 - tex_u_6;
-        if ((side == 1'b1) && (sin_out < 0)) tex_u_6 = 6'd63 - tex_u_6;
-        tex_u = {1'b0, wall_u_frac, 1'b0};
+        tex_u_5 = wall_u_frac[7:3];
+        if ((side == 1'b0) && (cos_out > 0)) tex_u_5 = 5'd31 - tex_u_5;
+        if ((side == 1'b1) && (sin_out < 0)) tex_u_5 = 5'd31 - tex_u_5;
+        tex_u = {5'd0, tex_u_5};
         wall_h = (wall_bottom_clamped > wall_top_clamped) ? (wall_bottom_clamped - wall_top_clamped) : 10'd1;
-        tex_step = (24'd512 << 8) / {14'd0, wall_h};
+        tex_step = (16'd32 << 8) / {6'd0, wall_h};
         if (vc < wall_top_clamped) begin
             tex_v = 10'd0;
         end else if (vc > wall_bottom_clamped) begin
             tex_v = 10'd0;
         end else begin
             tex_pos = {8'd0, (vc - wall_top_clamped)} * tex_step;
-            tex_v = {1'b0, tex_pos[16:8]};
+            tex_v_5 = tex_pos[12:8];
+            tex_v = {5'd0, tex_v_5};
         end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
-        wall_r_base = tex_r + (shade_banded >> 2);
-        if (wall_r_base < 4'd4) wall_r_base = 4'd4;
-        if (tex_idx[0] ^ side) begin
-            wall_r = wall_r_base + 4'd1;
-        end else begin
-            wall_r = wall_r_base - 4'd1;
-        end
-        if (wall_r < 4'd2) wall_r = 4'd2;
-        if (side) wall_r = wall_r - (wall_r >> 2);
-        wall_g = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
-        wall_b = (wall_r > 4'd3) ? (wall_r - 4'd3) : 4'd0;
-        fog_strength = (perp_steps > 10'd200) ? 4'd6 :
-               (perp_steps > 10'd160) ? 4'd4 :
-               (perp_steps > 10'd120) ? 4'd2 : 4'd0;
-        if (fog_strength != 4'd0) begin
-            wall_r = (wall_r + fog_strength) >> 1;
-            wall_g = wall_r;
-            wall_b = wall_r;
-        end
-        if (hit_tile_x[2] ^ hit_tile_y[2]) begin
-            wall_r = wall_r - (wall_r >> 3);
-            wall_g = wall_r;
-            wall_b = wall_r;
-        end
-        if (hc[4] ^ demo_tick[5]) begin
-            wall_r = wall_r + 4'd1;
-            wall_g = wall_r;
-            wall_b = wall_r;
-        end
+        wall_r_base = tex_r;
+        wall_r = wall_r_base;
+        if (side) wall_r = wall_r >> 1;
+        wall_g = wall_r;
+        wall_b = wall_r;
         moon_dx = $signed({1'b0, hc}) - 12'sd520;
         moon_dy = $signed({1'b0, vc}) - 12'sd110;
         moon_dx2 = moon_dx + 12'sd8;
