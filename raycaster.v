@@ -168,8 +168,10 @@ module vga_raycast_demo(
     wire signed [15:0] sin_out, cos_out;
     wire signed [15:0] move_sin, move_cos;
     reg [9:0] wall_half, wall_top, wall_bottom;
+    reg signed [10:0] wall_top_s, wall_bottom_s;
+    reg [9:0] wall_top_clamped, wall_bottom_clamped;
     reg [3:0] shade;
-    wire [3:0] wall_lit;
+    reg [3:0] shade_banded;
     reg signed [8:0] sweep;
     reg signed [8:0] sweep_shift;
     reg signed [8:0] ray_angle_sum;
@@ -177,19 +179,32 @@ module vga_raycast_demo(
     reg [7:0] cam_angle;
     reg [15:0] demo_tick;
     reg signed [15:0] move_dx, move_dy;
-    reg [1:0] wall_type;
     reg [1:0] wall_tex_id;
     reg [3:0] wall_r, wall_g, wall_b;
-    reg [8:0] tex_u, tex_v;
+    reg [9:0] tex_u, tex_v;
     reg [9:0] wall_h;
-    reg [9:0] tex_v_full;
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-        localparam BRICK_W = 32;
-        localparam BRICK_H = 16;
-        localparam MORTAR_X = 2;
-        localparam MORTAR_Y = 2;
+    reg [15:0] tex_step;
+    reg [23:0] tex_pos;
+    reg [5:0] tex_u_6;
+    reg [4:0] tex_v_5;
+    reg signed [17:0] hit_dx;
+    reg signed [17:0] hit_dy;
+    reg signed [33:0] hit_dot;
+    reg signed [33:0] hit_dot_shift;
+    reg signed [17:0] perp_dist;
+    reg [9:0] perp_steps;
+    reg [7:0] wall_u_frac;
+        localparam BRICK_W = 64;
+        localparam BRICK_H = 32;
+        localparam MORTAR_X = 4;
+        localparam MORTAR_Y = 3;
+        localparam BRICK_W_BITS = 6;
+        localparam BRICK_H_BITS = 5;
+        localparam BRICK_W_MASK = BRICK_W - 1;
+        localparam BRICK_H_MASK = BRICK_H - 1;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
     reg signed [17:0] sprite_forward_s, sprite_cross_s;
@@ -276,26 +291,18 @@ module vga_raycast_demo(
         end
     endfunction
 
-    function automatic [1:0] wall_type_at;
-        input [4:0] tx;
-        input [4:0] ty;
-        begin
-            if (is_wall_tile(tx, ty))
-                wall_type_at = 2'd2; // brick
-            else
-                wall_type_at = 2'd0;
-        end
-    endfunction
 
     function automatic [3:0] tex_index;
         input [1:0] tex_id;
-        input [8:0] u;
-        input [8:0] v;
+        input [9:0] u;
+        input [9:0] v;
         integer u_mod;
         integer v_mod;
         integer brick_x;
         integer brick_y;
         integer row_off;
+        reg [31:0] u_ext;
+        reg [31:0] v_ext;
         reg mortar;
         reg edge_hi;
         reg edge_lo;
@@ -303,16 +310,18 @@ module vga_raycast_demo(
         reg noise;
         reg [3:0] idx;
         begin
-            brick_y = {23'd0, v} / BRICK_H;
-            row_off = (brick_y[0] != 0) ? (BRICK_W / 2) : 0;
-            u_mod = ({23'd0, u} + row_off) % BRICK_W;
-            v_mod = {23'd0, v} % BRICK_H;
-            brick_x = ({23'd0, u} + row_off) / BRICK_W;
+            u_ext = {22'd0, u};
+            v_ext = {22'd0, v};
+            brick_y = v_ext >> BRICK_H_BITS;
+            row_off = (brick_y[0] != 0) ? (BRICK_W >> 1) : 0;
+            u_mod = (u_ext + row_off) & BRICK_W_MASK;
+            v_mod = v_ext & BRICK_H_MASK;
+            brick_x = (u_ext + row_off) >> BRICK_W_BITS;
             mortar = (u_mod < MORTAR_X) || (u_mod >= (BRICK_W - MORTAR_X)) ||
                      (v_mod < MORTAR_Y) || (v_mod >= (BRICK_H - MORTAR_Y));
             edge_hi = (v_mod < 2) || (u_mod < 2);
             edge_lo = (v_mod >= (BRICK_H - 2)) || (u_mod >= (BRICK_W - 2));
-            inner = u_mod[3] ^ v_mod[2] ^ brick_x[0];
+            inner = u_mod[4] ^ v_mod[3] ^ brick_x[0];
             noise = brick_x[1] ^ brick_y[0];
             idx = 4'd8;
 
@@ -353,23 +362,19 @@ module vga_raycast_demo(
     function automatic [11:0] tex_palette;
         input [1:0] tex_id;
         input [3:0] idx;
-        reg [3:0] r;
         reg [3:0] g;
-        reg [3:0] b;
         begin
-            r = 4'd8;
             g = 4'd6;
-            b = 4'd5;
             case (idx)
-                4'd1: begin r = 4'd4; g = 4'd3; b = 4'd3; end
-                4'd6: begin r = 4'd7; g = 4'd5; b = 4'd4; end
-                4'd8: begin r = 4'd9; g = 4'd7; b = 4'd6; end
-                4'd9: begin r = 4'd10; g = 4'd7; b = 4'd6; end
-                4'd10: begin r = 4'd11; g = 4'd8; b = 4'd6; end
-                4'd11: begin r = 4'd12; g = 4'd9; b = 4'd7; end
-                default: begin r = 4'd8; g = 4'd6; b = 4'd5; end
+                4'd1: g = 4'd3;
+                4'd6: g = 4'd5;
+                4'd8: g = 4'd8;
+                4'd9: g = 4'd9;
+                4'd10: g = 4'd10;
+                4'd11: g = 4'd11;
+                default: g = 4'd7;
             endcase
-            tex_palette = {r, g, b};
+            tex_palette = {g, g, g};
         end
     endfunction
 
@@ -379,7 +384,6 @@ module vga_raycast_demo(
     ray_dda r(.ray_x_q8_8(player_x), .ray_y_q8_8(player_y), .dir_x_q1_14(cos_out), .dir_y_q1_14(sin_out), .hit(hit), .hit_tile_x(hit_tile_x), .hit_tile_y(hit_tile_y), .hit_x_fp(hit_x_fp), .hit_y_fp(hit_y_fp), .dist_steps(dist_steps), .side(side));
 
     assign manual_active = manual_enable;
-    assign wall_lit = shade;
     assign ctrl_fwd = manual_active ? move_fwd : ~demo_tick[6];
     assign ctrl_back = manual_active ? move_back : 1'b0;
     assign ctrl_left = manual_active ? turn_left : 1'b0;
@@ -448,64 +452,77 @@ module vga_raycast_demo(
         sprite_visible = (sprite_forward_s > 18'sd0) && (sprite_screen_x < 10'd640);
         sprite_on = sprite_visible && (hc >= (sprite_screen_x - sprite_half)) && (hc <= (sprite_screen_x + sprite_half))
             && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
-        shade = shade_from_dist(dist_steps);
-        wall_half = (10'd320 / (dist_steps + 1)) + 10'd20;
-        wall_top = 10'd240 - wall_half;
-        wall_bottom = 10'd240 + wall_half;
+        hit_dx = $signed(hit_x_fp) - $signed({2'b0, player_x});
+        hit_dy = $signed(hit_y_fp) - $signed({2'b0, player_y});
+        hit_dot = (hit_dx * $signed(cos_out)) + (hit_dy * $signed(sin_out));
+        hit_dot_shift = hit_dot >>> 14;
+        perp_dist = $signed(hit_dot_shift[17:0]);
+        if (perp_dist[17]) perp_dist = -perp_dist;
+        perp_steps = perp_dist[17:8];
+        shade = shade_from_dist(perp_steps[8:0]);
+        shade_banded = {shade[3:1], 1'b0};
+        wall_half = (perp_steps != 10'd0) ? (10'd240 / perp_steps) : 10'd240;
+        if (wall_half < 10'd1) wall_half = 10'd1;
+        if (wall_half > 10'd240) wall_half = 10'd240;
+        wall_top_s = 11'sd240 - $signed({1'b0, wall_half});
+        wall_bottom_s = 11'sd240 + $signed({1'b0, wall_half});
+        wall_top = wall_top_s[9:0];
+        wall_bottom = wall_bottom_s[9:0];
+        if (wall_top_s < 0) wall_top_clamped = 10'd0;
+        else if (wall_top_s > 11'sd479) wall_top_clamped = 10'd479;
+        else wall_top_clamped = wall_top_s[9:0];
+        if (wall_bottom_s < 0) wall_bottom_clamped = 10'd0;
+        else if (wall_bottom_s > 11'sd479) wall_bottom_clamped = 10'd479;
+        else wall_bottom_clamped = wall_bottom_s[9:0];
 
-        wall_type = wall_type_at(hit_tile_x, hit_tile_y);
         wall_tex_id = 2'd0;
-        tex_u = side ? hit_y_fp[12:4] : hit_x_fp[12:4];
-        wall_h = (wall_bottom > wall_top) ? (wall_bottom - wall_top) : 10'd1;
-        if (vc < wall_top) tex_v = 9'd0;
-        else if (vc > wall_bottom) tex_v = 9'd511;
-        else begin
-            tex_v_full = (((vc - wall_top) * 512) + (wall_h >> 1)) / wall_h;
-            tex_v = {tex_v_full[8:0]};
-        end
-        if (dist_steps > 9'd240) begin
-            tex_v = {tex_v[8:1], 1'b0};
+        wall_u_frac = side ? hit_x_fp[7:0] : hit_y_fp[7:0];
+        tex_u_6 = wall_u_frac[7:2];
+        if ((side == 1'b0) && (cos_out > 0)) tex_u_6 = 6'd63 - tex_u_6;
+        if ((side == 1'b1) && (sin_out < 0)) tex_u_6 = 6'd63 - tex_u_6;
+        tex_u = {4'd0, tex_u_6};
+        wall_h = (wall_bottom_clamped > wall_top_clamped) ? (wall_bottom_clamped - wall_top_clamped) : 10'd1;
+        tex_step = (16'd32 << 8) / {6'd0, wall_h};
+        if (vc < wall_top_clamped) begin
+            tex_v = 10'd0;
+        end else if (vc > wall_bottom_clamped) begin
+            tex_v = 10'd0;
+        end else begin
+            tex_pos = {8'd0, (vc - wall_top_clamped)} * tex_step;
+            tex_v_5 = tex_pos[12:8];
+            tex_v = {5'd0, tex_v_5};
         end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
-        tex_g = tex_color[7:4];
-        tex_b = tex_color[3:0];
-        wall_r_base = tex_r + (wall_lit >> 2);
-        wall_g_base = tex_g + (wall_lit >> 3);
-        wall_b_base = tex_b + (wall_lit >> 3);
+        wall_r_base = tex_r + (shade_banded >> 2);
         if (wall_r_base < 4'd4) wall_r_base = 4'd4;
-        if (wall_g_base < 4'd3) wall_g_base = 4'd3;
-        if (wall_b_base < 4'd2) wall_b_base = 4'd2;
         if (tex_idx[0] ^ side) begin
             wall_r = wall_r_base + 4'd1;
-            wall_g = wall_g_base + 4'd1;
-            wall_b = wall_b_base + 4'd1;
         end else begin
             wall_r = wall_r_base - 4'd1;
-            wall_g = wall_g_base - 4'd1;
-            wall_b = wall_b_base - 4'd1;
         end
         if (wall_r < 4'd2) wall_r = 4'd2;
-        if (wall_g < 4'd1) wall_g = 4'd1;
-        if (wall_b < 4'd1) wall_b = 4'd1;
-        fog_strength = (dist_steps > 9'd200) ? 4'd6 :
-                       (dist_steps > 9'd160) ? 4'd4 :
-                       (dist_steps > 9'd120) ? 4'd2 : 4'd0;
+        if (side) wall_r = wall_r - (wall_r >> 2);
+        wall_g = (wall_r > 4'd1) ? (wall_r - 4'd1) : 4'd0;
+        wall_b = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
+        fog_strength = (perp_steps > 10'd200) ? 4'd6 :
+               (perp_steps > 10'd160) ? 4'd4 :
+               (perp_steps > 10'd120) ? 4'd2 : 4'd0;
         if (fog_strength != 4'd0) begin
             wall_r = (wall_r + fog_strength) >> 1;
-            wall_g = (wall_g + fog_strength) >> 1;
-            wall_b = (wall_b + fog_strength) >> 1;
+            wall_g = wall_r;
+            wall_b = wall_r;
         end
         if (hit_tile_x[2] ^ hit_tile_y[2]) begin
             wall_r = wall_r - (wall_r >> 3);
-            wall_g = wall_g - (wall_g >> 3);
-            wall_b = wall_b - (wall_b >> 3);
+            wall_g = wall_r;
+            wall_b = wall_r;
         end
         if (hc[4] ^ demo_tick[5]) begin
             wall_r = wall_r + 4'd1;
-            wall_g = wall_g + 4'd1;
-            wall_b = wall_b + 4'd1;
+            wall_g = wall_r;
+            wall_b = wall_r;
         end
         moon_dx = $signed({1'b0, hc}) - 12'sd520;
         moon_dy = $signed({1'b0, vc}) - 12'sd110;
@@ -537,11 +554,11 @@ module vga_raycast_demo(
         flash_on = (lfsr[7:0] == 8'h5a) && (demo_tick[2:0] == 3'b000);
 
         sky_base = 4'd2 + {1'b0, vc[8:6]};
-        edge_on = hit && (hc == 0 || hc == 10'd639 || vc == wall_top || vc == wall_bottom);
+        edge_on = hit && (hc == 0 || hc == 10'd639 || vc == wall_top_clamped || vc == wall_bottom_clamped);
 
         if (!active) begin
             vga_r = 0; vga_g = 0; vga_b = 0;
-        end else if (vc < wall_top) begin
+        end else if (vc < wall_top_clamped) begin
             if (moon_on && (hc < 10'd620) && (vc < 10'd160)) begin
                 vga_r = 4'd10; vga_g = 4'd10; vga_b = 4'd10;
                 if (moon_crescent) begin
@@ -558,7 +575,7 @@ module vga_raycast_demo(
             end else begin
                 vga_r = 4'd2; vga_g = 4'd2; vga_b = sky_base;
             end
-        end else if (vc > wall_bottom) begin
+        end else if (vc > wall_bottom_clamped) begin
             water_g_tmp = 5'd3 + {2'b00, vc[8:7]} + {2'b00, vc[6:5]} + {3'b000, cam_angle[7:6]};
             water_b_tmp = 5'd2 + {2'b00, vc[7:6]};
             water_g = water_g_tmp[3:0];
@@ -584,13 +601,13 @@ module vga_raycast_demo(
                 vga_r = 4'd10; vga_g = 4'd10; vga_b = 4'd10;
             end
         end else if (hit) begin
-            vga_r = side ? (wall_r - (wall_r >> 2)) : wall_r;
-            vga_g = side ? (wall_g - (wall_g >> 2)) : wall_g;
-            vga_b = side ? (wall_b - (wall_b >> 2)) : wall_b;
+            vga_r = wall_r;
+            vga_g = vga_r;
+            vga_b = vga_r;
             if (edge_on) begin
                 vga_r = vga_r - 4'd2;
-                vga_g = vga_g - 4'd2;
-                vga_b = vga_b - 4'd2;
+                vga_g = vga_r;
+                vga_b = vga_r;
             end
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
