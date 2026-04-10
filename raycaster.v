@@ -363,19 +363,26 @@ module vga_raycast_demo(
     function automatic [11:0] tex_palette;
         input [1:0] tex_id;
         input [3:0] idx;
+        reg [3:0] base;
+        reg [3:0] r;
         reg [3:0] g;
+        reg [3:0] b;
         begin
-            g = 4'd6;
+            base = 4'd6;
             case (idx)
-                4'd1: g = 4'd3;
-                4'd6: g = 4'd5;
-                4'd8: g = 4'd8;
-                4'd9: g = 4'd9;
-                4'd10: g = 4'd10;
-                4'd11: g = 4'd11;
-                default: g = 4'd7;
+                4'd1: base = 4'd3;
+                4'd6: base = 4'd5;
+                4'd8: base = 4'd8;
+                4'd9: base = 4'd9;
+                4'd10: base = 4'd10;
+                4'd11: base = 4'd11;
+                default: base = 4'd7;
             endcase
-            tex_palette = {g, g, g};
+            // Subtle warm tint while preserving the brick contrast.
+            r = base + ((base >= 4'd2) ? 4'd1 : 4'd0);
+            g = (base > 4'd1) ? (base - 4'd1) : 4'd0;
+            b = (base > 4'd2) ? (base - 4'd2) : 4'd0;
+            tex_palette = {r, g, b};
         end
     endfunction
 
