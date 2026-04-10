@@ -186,9 +186,9 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-        localparam BRICK_W = 36;
-        localparam BRICK_H = 18;
-        localparam MORTAR_X = 3;
+        localparam BRICK_W = 32;
+        localparam BRICK_H = 16;
+        localparam MORTAR_X = 2;
         localparam MORTAR_Y = 2;
     reg signed [17:0] sprite_dx, sprite_dy;
     reg signed [31:0] sprite_forward, sprite_cross;
@@ -207,6 +207,10 @@ module vga_raycast_demo(
     reg star_on2;
     reg star_twinkle;
     reg star_static;
+    reg [4:0] star_cell_x;
+    reg [4:0] star_cell_y;
+    reg [7:0] star_hash;
+    reg [7:0] star_cell_mix;
     reg dust_on;
     reg moon_rim;
     reg meteor_on;
@@ -218,7 +222,11 @@ module vga_raycast_demo(
     reg [10:0] sky_x2;
     reg [3:0] water_g;
     reg [3:0] water_b;
+    reg [4:0] water_g_tmp;
+    reg [4:0] water_b_tmp;
     reg [3:0] wall_r_base;
+    reg [3:0] wall_g_base;
+    reg [3:0] wall_b_base;
     reg [15:0] lfsr;
     reg [3:0] sky_base;
     reg [3:0] fog_strength;
@@ -273,7 +281,7 @@ module vga_raycast_demo(
         input [4:0] ty;
         begin
             if (is_wall_tile(tx, ty))
-                wall_type_at = 2'd2; // single brick texture
+                wall_type_at = 2'd2; // brick
             else
                 wall_type_at = 2'd0;
         end
@@ -289,6 +297,8 @@ module vga_raycast_demo(
         integer brick_y;
         integer row_off;
         reg mortar;
+        reg edge_hi;
+        reg edge_lo;
         reg inner;
         reg noise;
         reg [3:0] idx;
@@ -298,17 +308,21 @@ module vga_raycast_demo(
             u_mod = ({23'd0, u} + row_off) % BRICK_W;
             v_mod = {23'd0, v} % BRICK_H;
             brick_x = ({23'd0, u} + row_off) / BRICK_W;
-                                                mortar = (u_mod < MORTAR_X) || (u_mod >= (BRICK_W - MORTAR_X)) ||
-                                                    (v_mod < MORTAR_Y) || (v_mod >= (BRICK_H - MORTAR_Y));
-                                                inner = u_mod[3] ^ v_mod[2] ^ brick_x[0];
-                                                noise = brick_x[1] ^ brick_y[0];
-            idx = 4'd9;
+            mortar = (u_mod < MORTAR_X) || (u_mod >= (BRICK_W - MORTAR_X)) ||
+                     (v_mod < MORTAR_Y) || (v_mod >= (BRICK_H - MORTAR_Y));
+            edge_hi = (v_mod < 2) || (u_mod < 2);
+            edge_lo = (v_mod >= (BRICK_H - 2)) || (u_mod >= (BRICK_W - 2));
+            inner = u_mod[3] ^ v_mod[2] ^ brick_x[0];
+            noise = brick_x[1] ^ brick_y[0];
+            idx = 4'd8;
 
             case (tex_id)
                 default: begin
-                    if (mortar) idx = 4'd2;
+                    if (mortar) idx = 4'd1;
+                    else if (edge_hi) idx = 4'd11;
+                    else if (edge_lo) idx = 4'd6;
                     else if (brick_x[0] ^ brick_y[0]) idx = 4'd9;
-                    else idx = 4'd10 + {3'b000, (inner ^ noise)};
+                    else idx = 4'd8 + {3'b000, (inner ^ noise)};
                 end
             endcase
             tex_index = idx;
@@ -339,18 +353,23 @@ module vga_raycast_demo(
     function automatic [11:0] tex_palette;
         input [1:0] tex_id;
         input [3:0] idx;
+        reg [3:0] r;
         reg [3:0] g;
+        reg [3:0] b;
         begin
+            r = 4'd8;
             g = 4'd6;
+            b = 4'd5;
             case (idx)
-                4'd2: g = 4'd2;
-                4'd8: g = 4'd10;
-                4'd9: g = 4'd11;
-                4'd10: g = 4'd12;
-                4'd11: g = 4'd13;
-                default: g = 4'd8;
+                4'd1: begin r = 4'd4; g = 4'd3; b = 4'd3; end
+                4'd6: begin r = 4'd7; g = 4'd5; b = 4'd4; end
+                4'd8: begin r = 4'd9; g = 4'd7; b = 4'd6; end
+                4'd9: begin r = 4'd10; g = 4'd7; b = 4'd6; end
+                4'd10: begin r = 4'd11; g = 4'd8; b = 4'd6; end
+                4'd11: begin r = 4'd12; g = 4'd9; b = 4'd7; end
+                default: begin r = 4'd8; g = 4'd6; b = 4'd5; end
             endcase
-            tex_palette = {g, g, g};
+            tex_palette = {r, g, b};
         end
     endfunction
 
@@ -428,7 +447,7 @@ module vga_raycast_demo(
         sprite_right = sprite_screen_x + sprite_half;
         sprite_visible = (sprite_forward_s > 18'sd0) && (sprite_screen_x < 10'd640);
         sprite_on = sprite_visible && (hc >= (sprite_screen_x - sprite_half)) && (hc <= (sprite_screen_x + sprite_half))
-                    && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
+            && (vc >= sprite_top) && (vc <= sprite_bottom) && (sprite_dist_steps < dist_steps);
         shade = shade_from_dist(dist_steps);
         wall_half = (10'd320 / (dist_steps + 1)) + 10'd20;
         wall_top = 10'd240 - wall_half;
@@ -450,33 +469,43 @@ module vga_raycast_demo(
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
         tex_r = tex_color[11:8];
+        tex_g = tex_color[7:4];
+        tex_b = tex_color[3:0];
         wall_r_base = tex_r + (wall_lit >> 2);
+        wall_g_base = tex_g + (wall_lit >> 3);
+        wall_b_base = tex_b + (wall_lit >> 3);
         if (wall_r_base < 4'd4) wall_r_base = 4'd4;
+        if (wall_g_base < 4'd3) wall_g_base = 4'd3;
+        if (wall_b_base < 4'd2) wall_b_base = 4'd2;
         if (tex_idx[0] ^ side) begin
             wall_r = wall_r_base + 4'd1;
+            wall_g = wall_g_base + 4'd1;
+            wall_b = wall_b_base + 4'd1;
         end else begin
             wall_r = wall_r_base - 4'd1;
+            wall_g = wall_g_base - 4'd1;
+            wall_b = wall_b_base - 4'd1;
         end
         if (wall_r < 4'd2) wall_r = 4'd2;
-        wall_g = (wall_r > 4'd1) ? (wall_r - 4'd1) : 4'd0;
-        wall_b = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
+        if (wall_g < 4'd1) wall_g = 4'd1;
+        if (wall_b < 4'd1) wall_b = 4'd1;
         fog_strength = (dist_steps > 9'd200) ? 4'd6 :
                        (dist_steps > 9'd160) ? 4'd4 :
                        (dist_steps > 9'd120) ? 4'd2 : 4'd0;
         if (fog_strength != 4'd0) begin
             wall_r = (wall_r + fog_strength) >> 1;
-            wall_g = wall_r;
-            wall_b = wall_r;
+            wall_g = (wall_g + fog_strength) >> 1;
+            wall_b = (wall_b + fog_strength) >> 1;
         end
         if (hit_tile_x[2] ^ hit_tile_y[2]) begin
             wall_r = wall_r - (wall_r >> 3);
-            wall_g = wall_r;
-            wall_b = wall_r;
+            wall_g = wall_g - (wall_g >> 3);
+            wall_b = wall_b - (wall_b >> 3);
         end
         if (hc[4] ^ demo_tick[5]) begin
             wall_r = wall_r + 4'd1;
-            wall_g = wall_r;
-            wall_b = wall_r;
+            wall_g = wall_g + 4'd1;
+            wall_b = wall_b + 4'd1;
         end
         moon_dx = $signed({1'b0, hc}) - 12'sd520;
         moon_dy = $signed({1'b0, vc}) - 12'sd110;
@@ -490,13 +519,17 @@ module vga_raycast_demo(
         moon_rim = moon_disk && (moon_dist > 24'd784);
         sky_x1 = {1'b0, hc} + {2'b0, cam_angle} + {4'b0000, demo_tick[6:0]};
         sky_x2 = {1'b0, hc} + {3'b000, cam_angle[7:1]} + {5'b00000, demo_tick[5:0]};
-        star_on = ((((sky_x1[7:0] ^ vc[7:0]) + (sky_x1[7:0] << 1) + (vc[7:0] << 2)) & 8'hff) < 8'd3) &&
-              (vc < 10'd140);
+          star_cell_x = hc[7:3];
+          star_cell_y = vc[7:3];
+          star_cell_mix = {3'b000, star_cell_x} + ({3'b000, star_cell_x} << 2) +
+                    ({3'b000, star_cell_y} << 3) + {3'b000, star_cell_y};
+          star_hash = star_cell_mix ^ {vc[3:0], hc[7:4]};
+          star_on = (star_hash[7:6] == 2'b00) && (hc[2:0] == star_hash[2:0]) &&
+                (vc[2:0] == star_hash[5:3]) && (vc < 10'd140);
         star_on2 = 1'b0;
         dust_on = 1'b0;
-        star_twinkle = star_on && (demo_tick[3] ^ hc[2]);
-        star_static = ((((hc[7:0] ^ (vc[7:0] << 1) ^ 8'h5a) & 8'hff) < 8'd2)) &&
-                  (vc < 10'd140);
+          star_twinkle = star_on && demo_tick[2];
+          star_static = 1'b0;
         meteor_x = {lfsr[7:0], 2'b00} + demo_tick[9:0];
         meteor_y = {lfsr[15:8], 2'b00} + {demo_tick[9:1], 1'b0};
         meteor_dx = $signed({1'b0, hc}) - $signed({1'b0, meteor_x});
@@ -526,8 +559,10 @@ module vga_raycast_demo(
                 vga_r = 4'd2; vga_g = 4'd2; vga_b = sky_base;
             end
         end else if (vc > wall_bottom) begin
-            water_g = 4'd3 + {3'b000, vc[8:7]} + {3'b000, vc[6:5]} + {2'b00, cam_angle[7:6]};
-            water_b = 4'd2 + {3'b000, vc[7:6]};
+            water_g_tmp = 5'd3 + {2'b00, vc[8:7]} + {2'b00, vc[6:5]} + {3'b000, cam_angle[7:6]};
+            water_b_tmp = 5'd2 + {2'b00, vc[7:6]};
+            water_g = water_g_tmp[3:0];
+            water_b = water_b_tmp[3:0];
             if (((hc[2:0] == (demo_tick[2:0] ^ cam_angle[2:0])) && (vc[2:0] == demo_tick[5:3])) ||
                 ((hc[4] ^ vc[3] ^ demo_tick[4]) && (hc[1:0] == (demo_tick[1:0] ^ cam_angle[1:0]))) ||
                 ((hc[3:0] == demo_tick[3:0]) && (vc[3:0] == (demo_tick[7:4] ^ cam_angle[3:0]))) ||
@@ -550,12 +585,12 @@ module vga_raycast_demo(
             end
         end else if (hit) begin
             vga_r = side ? (wall_r - (wall_r >> 2)) : wall_r;
-            vga_g = vga_r;
-            vga_b = vga_r;
+            vga_g = side ? (wall_g - (wall_g >> 2)) : wall_g;
+            vga_b = side ? (wall_b - (wall_b >> 2)) : wall_b;
             if (edge_on) begin
                 vga_r = vga_r - 4'd2;
-                vga_g = vga_r;
-                vga_b = vga_r;
+                vga_g = vga_g - 4'd2;
+                vga_b = vga_b - 4'd2;
             end
         end else begin
             vga_r = 15; vga_g = 0; vga_b = 0;
