@@ -186,7 +186,7 @@ module vga_raycast_demo(
     reg [3:0] tex_idx;
     reg [11:0] tex_color;
     reg [3:0] tex_r, tex_g, tex_b;
-    reg [15:0] tex_step;
+    reg [23:0] tex_step;
     reg [23:0] tex_pos;
     reg [5:0] tex_u_6;
     reg [4:0] tex_v_5;
@@ -461,7 +461,7 @@ module vga_raycast_demo(
         perp_steps = perp_dist[17:8];
         shade = shade_from_dist(perp_steps[8:0]);
         shade_banded = {shade[3:1], 1'b0};
-        wall_half = (perp_steps != 10'd0) ? (10'd240 / perp_steps) : 10'd240;
+        wall_half = (perp_steps != 10'd0) ? (10'd280 / perp_steps) : 10'd240;
         if (wall_half < 10'd1) wall_half = 10'd1;
         if (wall_half > 10'd240) wall_half = 10'd240;
         wall_top_s = 11'sd240 - $signed({1'b0, wall_half});
@@ -480,17 +480,16 @@ module vga_raycast_demo(
         tex_u_6 = wall_u_frac[7:2];
         if ((side == 1'b0) && (cos_out > 0)) tex_u_6 = 6'd63 - tex_u_6;
         if ((side == 1'b1) && (sin_out < 0)) tex_u_6 = 6'd63 - tex_u_6;
-        tex_u = {4'd0, tex_u_6};
+        tex_u = {1'b0, wall_u_frac, 1'b0};
         wall_h = (wall_bottom_clamped > wall_top_clamped) ? (wall_bottom_clamped - wall_top_clamped) : 10'd1;
-        tex_step = (16'd32 << 8) / {6'd0, wall_h};
+        tex_step = (24'd512 << 8) / {14'd0, wall_h};
         if (vc < wall_top_clamped) begin
             tex_v = 10'd0;
         end else if (vc > wall_bottom_clamped) begin
             tex_v = 10'd0;
         end else begin
             tex_pos = {8'd0, (vc - wall_top_clamped)} * tex_step;
-            tex_v_5 = tex_pos[12:8];
-            tex_v = {5'd0, tex_v_5};
+            tex_v = {1'b0, tex_pos[16:8]};
         end
         tex_idx = tex_index(wall_tex_id, tex_u, tex_v);
         tex_color = tex_palette(wall_tex_id, tex_idx);
@@ -504,8 +503,8 @@ module vga_raycast_demo(
         end
         if (wall_r < 4'd2) wall_r = 4'd2;
         if (side) wall_r = wall_r - (wall_r >> 2);
-        wall_g = (wall_r > 4'd1) ? (wall_r - 4'd1) : 4'd0;
-        wall_b = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
+        wall_g = (wall_r > 4'd2) ? (wall_r - 4'd2) : 4'd0;
+        wall_b = (wall_r > 4'd3) ? (wall_r - 4'd3) : 4'd0;
         fog_strength = (perp_steps > 10'd200) ? 4'd6 :
                (perp_steps > 10'd160) ? 4'd4 :
                (perp_steps > 10'd120) ? 4'd2 : 4'd0;
